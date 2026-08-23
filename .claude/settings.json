@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo *)",
+      "Bash(npx tsc *)",
+      "Bash(timeout 45 npx expo start --web --non-interactive)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(rm -rf \"/c/Users/ashar/AppData/Local/Temp/catkin-export\" 2>&1; echo done)",
+      "Bash(npm view *)",
+      "Bash(npm install *)",
+      "Bash(echo \"TSC_EXIT:$?\")",
+      "Bash(rm -rf \"/c/Users/ashar/AppData/Local/Temp/catkin-export-sdk56\" 2>&1; echo done)",
+      "WebFetch(domain:play.google.com)",
+      "WebFetch(domain:expo.dev)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm uninstall *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@expo/vector-icons/package.json'\\).version\\)\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\ashar\\AppData\\Local\\Temp\\catkin-export",
+      "C:\\Users\\ashar\\AppData\\Local\\Temp\\catkin-export-sdk56"
+    ]
+  }
+}

@@ -1,0 +1,133 @@
+import type { Request, Response } from "express";
+import { isValidObjectId, mongo } from "mongoose";
+import { ZodError } from "zod";
+
+import { Client } from "../model/client.model";
+import { createClientSchema, editClientSchema, listClientsQuerySchema } from "../schemas/client.zod";
+
+function isDuplicateUsernameError(error: unknown): boolean {
+  return (
+    error instanceof mongo.MongoServerError &&
+    error.code === 11000 &&
+    Object.keys(error.keyPattern ?? {}).includes("client.username")
+  );
+}
+
+export async function createClient(req: Request, res: Response) {
+  try {
+    const input = createClientSchema.parse(req.body);
+    const client = await Client.createClient(input);
+    res.status(201).json({ success: true, client });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    if (isDuplicateUsernameError(error)) {
+      res
+        .status(409)
+        .json({ success: false, message: "Username already taken", errors: { "client.username": ["Username already taken"] } });
+      return;
+    }
+    console.error("Failed to create client:", error);
+    res.status(500).json({ success: false, message: "Failed to create client" });
+  }
+}
+
+export async function getAllClients(req: Request, res: Response) {
+  try {
+    const { page, search } = listClientsQuerySchema.parse(req.query);
+    const result = await Client.getAllClients(page, search);
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid query", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Failed to fetch clients:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch clients" });
+  }
+}
+
+export async function getClient(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid client id" });
+      return;
+    }
+
+    const client = await Client.getClientById(id);
+    if (!client) {
+      res.status(404).json({ success: false, message: "Client not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, client });
+  } catch (error) {
+    console.error("Failed to fetch client:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch client" });
+  }
+}
+
+export async function editClient(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid client id" });
+      return;
+    }
+
+    const input = editClientSchema.parse(req.body);
+    const updatedClient = await Client.editClient(id, input);
+    if (!updatedClient) {
+      res.status(404).json({ success: false, message: "Client not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, client: updatedClient });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    if (isDuplicateUsernameError(error)) {
+      res
+        .status(409)
+        .json({ success: false, message: "Username already taken", errors: { "client.username": ["Username already taken"] } });
+      return;
+    }
+    console.error("Failed to edit client:", error);
+    res.status(500).json({ success: false, message: "Failed to edit client" });
+  }
+}
+
+export async function deleteClient(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid client id" });
+      return;
+    }
+
+    const deletedClient = await Client.deleteClient(id);
+    if (!deletedClient) {
+      res.status(404).json({ success: false, message: "Client not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, message: "Client deleted successfully", client: deletedClient });
+  } catch (error) {
+    console.error("Failed to delete client:", error);
+    res.status(500).json({ success: false, message: "Failed to delete client" });
+  }
+}

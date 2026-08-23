@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #1b75bc;
+  --color-primary-dark: #1a6fae;
+  --color-secondary: #5b9bd5;
+  --color-accent: #8dc63f;
+  --color-success: #8dc63f;
+  --color-link-blue: #2e86c1;
+
+  --color-text-dark: #333333;
+  --color-text-darker: #222222;
+
+  --color-background: #f5f7fa;
+  --color-border: #e0e0e0;
+  --color-gray: #9aa5b1;
+
+  --color-warning: #e0574c;
+  --color-danger: #dc2626;
+
+  --font-sans: "Segoe UI", system-ui, Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-text-dark);
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.35s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.Toastify__toast {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+}
+
+.Toastify__toast--success {
+  border-left: 4px solid var(--color-success);
+}
+
+.Toastify__toast--error {
+  border-left: 4px solid var(--color-danger);
+}
+
+.Toastify__toast--warning {
+  border-left: 4px solid var(--color-warning);
+}
+
+.Toastify__toast--info {
+  border-left: 4px solid var(--color-primary);
+}
+
+.Toastify__progress-bar--success {
+  background: var(--color-success);
+}
+
+.Toastify__progress-bar--error {
+  background: var(--color-danger);
+}

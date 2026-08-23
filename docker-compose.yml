@@ -1,0 +1,50 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    command: npm run dev
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/${MONGO_DB_NAME:-catkin}
+      # Docker Desktop on Windows often can't deliver native filesystem change
+      # events into containers, so tsx's watcher falls back to polling.
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+    depends_on:
+      - mongo
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./webFrontend
+      target: dev
+    command: npm run dev
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      # Same Windows/Docker filesystem-event issue — make Vite's watcher poll.
+      VITE_USE_POLLING: "true"
+    depends_on:
+      - backend
+    volumes:
+      - ./webFrontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
