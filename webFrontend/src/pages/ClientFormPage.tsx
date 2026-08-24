@@ -141,45 +141,23 @@ export default function ClientFormPage() {
       />
 
       <form onSubmit={handleSubmit} className="flex flex-1 overflow-hidden">
-        <nav className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-white py-3 lg:flex">
-          {SECTIONS.map((section) => {
-            const isActive = section.key === activeSection;
-            return (
-              <button
-                key={section.key}
-                type="button"
-                onClick={() => setActiveSection(section.key)}
-                className={`flex cursor-pointer items-center justify-between gap-2 border-l-4 px-4 py-3 text-left text-sm font-semibold transition ${
-                  isActive
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-transparent text-text-dark hover:bg-background"
-                }`}
-              >
-                <span>{section.navLabel}</span>
-                {isSectionFilled(section.key) && (
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-accent"
-                    aria-label="Section has data"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="border-b border-border bg-white px-4 py-3 lg:hidden">
+          <div className="border-b border-border bg-white px-4 py-3">
             <SectionTabNav
-              sections={SECTIONS.map((section) => ({ id: section.key, label: section.navLabel }))}
+              sections={SECTIONS.map((section) => ({
+                id: section.key,
+                label: section.navLabel,
+                filled: isSectionFilled(section.key),
+              }))}
               activeId={activeSection}
               onSelect={setActiveSection}
             />
           </div>
 
           <div className="flex-1 overflow-y-auto px-8 py-8">
-            <div className="mx-auto max-w-2xl">
+            <div className="mx-auto max-w-6xl">
               <FormSection title={currentSection.title}>
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {currentSection.fields.map((field) => {
                     const isPassword = field.key === "password";
                     return (

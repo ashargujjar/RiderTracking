@@ -1,4 +1,7 @@
-export type ComplaintStatus = "Pending" | "In Progress" | "Resolved";
+// "Pending Approval" is set by the rider (via the mobile app) when they mark the job
+// done — it's not final until an admin reviews the resolution photos/notes and approves,
+// which moves it to "Resolved". See backend/schemas/complaint.schema.ts.
+export type ComplaintStatus = "Pending" | "In Progress" | "Pending Approval" | "Resolved";
 
 export type PaymentStatus = "Paid" | "Unpaid";
 
@@ -14,6 +17,7 @@ export type ComplaintRecord = {
   raisedDate: string;
   resolvedDate?: string;
   resolutionNotes?: string;
+  resolutionPhotos?: string[]; // rider-submitted proof-of-work photo URLs, optional
   amountDue: number;
   paymentStatus: PaymentStatus;
 };
@@ -93,9 +97,11 @@ export const MOCK_COMPLAINTS: ComplaintRecord[] = [
     description: "One of the mounting bolts on the elevated structure appears loose after recent windstorm.",
     photoCount: 2,
     site: "Blue Ridge Warehouse",
-    status: "In Progress",
+    status: "Pending Approval",
     assignedTo: "Hamza Khan",
     raisedDate: "2026-08-10",
+    resolutionNotes: "Re-tightened and thread-locked the loose mounting bolt, checked the rest of the array.",
+    resolutionPhotos: ["photo-1", "photo-2"],
     amountDue: 0,
     paymentStatus: "Unpaid",
   },

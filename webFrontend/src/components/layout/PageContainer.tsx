@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type ContainerWidth = "hub" | "wide-table" | "compact" | "detail" | "search-single" | "search-list" | "form";
 
 const WIDTH_STYLES: Record<ContainerWidth, string> = {
-  hub: "max-w-5xl",
+  hub: "max-w-6xl",
   "wide-table": "max-w-5xl",
   compact: "max-w-4xl",
   detail: "max-w-6xl",

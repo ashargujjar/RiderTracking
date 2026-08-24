@@ -82,7 +82,8 @@ export class Client {
     const client = await ClientSchema.findById(id).lean();
     if (!client) return null;
 
-    return client;
+    const { password, ...clientInfoSafe } = client.client;
+    return { ...client, client: clientInfoSafe };
   }
 
   static async editClient(id: string, input: EditClientInput) {

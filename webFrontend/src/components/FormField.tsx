@@ -35,7 +35,7 @@ export function FormField({
   };
 
   return (
-    <div className={`flex flex-col gap-1.5 ${fullWidth ? "sm:col-span-2" : ""}`}>
+    <div className={`flex flex-col gap-1.5 ${fullWidth ? "sm:col-span-2 lg:col-span-3" : ""}`}>
       <label className="text-xs font-semibold text-text-dark">
         {label}
         {required && <span className="text-danger"> *</span>}

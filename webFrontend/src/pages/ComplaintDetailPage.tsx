@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -36,7 +36,7 @@ import { getClientSummary, MOCK_CLIENTS } from "../data/mockClients";
 import { MOCK_RIDERS } from "../data/mockRiders";
 import { getPlaceholderPhoto } from "../utils/placeholderPhoto";
 
-const STATUS_OPTIONS: ComplaintStatus[] = ["Pending", "In Progress", "Resolved"];
+const STATUS_OPTIONS: ComplaintStatus[] = ["Pending", "In Progress", "Pending Approval", "Resolved"];
 
 const NAV_SECTIONS = [
   { id: "complaint-info", label: "Complaint Info", icon: ClipboardList },
@@ -60,7 +60,9 @@ export default function ComplaintDetailPage() {
   const client = complaint ? MOCK_CLIENTS.find((item) => item.id === complaint.clientId) : undefined;
   const clientSummary = client ? getClientSummary(client) : undefined;
   const isLoading = useSimulatedLoading();
-  const [activePhoto, setActivePhoto] = useState<number | null>(null);
+  const [activePhoto, setActivePhoto] = useState<{ gallery: "original" | "resolution"; index: number } | null>(
+    null,
+  );
 
   const [statusInput, setStatusInput] = useState<ComplaintStatus>(complaint?.status ?? "Pending");
   const [assignedToInput, setAssignedToInput] = useState<string>(complaint?.assignedTo ?? "Unassigned");
@@ -71,24 +73,8 @@ export default function ComplaintDetailPage() {
   const [isPaymentSaved, setIsPaymentSaved] = useState(false);
   const [isAdminSaving, setIsAdminSaving] = useState(false);
   const [isAdminSaved, setIsAdminSaved] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(NAV_SECTIONS[0].id);
-
-  useEffect(() => {
-    if (!complaint || isLoading) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) setActiveSection(entry.target.id);
-        }
-      },
-      { rootMargin: "-15% 0px -70% 0px", threshold: 0 },
-    );
-    const elements = NAV_SECTIONS.map((section) => document.getElementById(section.id)).filter(
-      (el): el is HTMLElement => el !== null,
-    );
-    elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [complaint, isLoading]);
 
   const unpaidHistory = complaint ? getClientUnpaidComplaints(complaint.clientId, complaint.id) : [];
   const carriedOverDue = complaint ? getCarriedOverDue(complaint.clientId, complaint.id) : 0;
@@ -126,16 +112,21 @@ export default function ComplaintDetailPage() {
     );
   }
 
-  const showPrev = () =>
-    setActivePhoto((current) => (current === null ? current : (current - 1 + complaint.photoCount) % complaint.photoCount));
-  const showNext = () =>
-    setActivePhoto((current) => (current === null ? current : (current + 1) % complaint.photoCount));
+  const activeGalleryCount =
+    activePhoto?.gallery === "resolution" ? (complaint.resolutionPhotos?.length ?? 0) : complaint.photoCount;
 
-  const scrollToSection = (sectionId: string) =>
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const showPrev = () =>
+    setActivePhoto((current) =>
+      current === null ? current : { ...current, index: (current.index - 1 + activeGalleryCount) % activeGalleryCount },
+    );
+  const showNext = () =>
+    setActivePhoto((current) =>
+      current === null ? current : { ...current, index: (current.index + 1) % activeGalleryCount },
+    );
 
   const parsedAmountDue = Math.max(0, Math.round(Number(amountDueInput) || 0));
   const totalPayable = parsedAmountDue + carriedOverDue;
+  const isFinalized = complaint.status === "Resolved" && (complaint.amountDue === 0 || complaint.paymentStatus === "Paid");
 
   const handleSaveAdmin = () => {
     setIsAdminSaving(true);
@@ -153,6 +144,16 @@ export default function ComplaintDetailPage() {
       setIsAdminSaving(false);
       setIsAdminSaved(true);
       setTimeout(() => setIsAdminSaved(false), 1800);
+    }, 600);
+  };
+
+  const handleApprove = () => {
+    setIsApproving(true);
+    setTimeout(() => {
+      complaint.status = "Resolved";
+      complaint.resolvedDate = new Date().toISOString().slice(0, 10);
+      setStatusInput("Resolved");
+      setIsApproving(false);
     }, 600);
   };
 
@@ -190,6 +191,28 @@ export default function ComplaintDetailPage() {
           </div>
         </div>
 
+        {complaint.status === "Pending Approval" && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-secondary/30 bg-secondary/10 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
+              <div>
+                <p className="text-sm font-bold text-secondary">Rider marked this complaint resolved</p>
+                <p className="mt-1 text-sm text-text-dark">
+                  Review the resolution notes and photos below, then approve to close it.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={isApproving}
+              className="flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-secondary px-5 text-sm font-bold text-white shadow-md shadow-secondary/30 transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-75"
+            >
+              {isApproving ? <Spinner /> : "Approve & Close"}
+            </button>
+          </div>
+        )}
+
         {unpaidHistory.length > 0 && (
           <div className="mt-6 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
@@ -209,37 +232,16 @@ export default function ComplaintDetailPage() {
           </div>
         )}
 
-        <div className="mt-6 lg:hidden">
+        <div className="mt-6">
           <SectionTabNav
             sections={NAV_SECTIONS.map(({ id: sectionId, label }) => ({ id: sectionId, label }))}
             activeId={activeSection}
-            onSelect={scrollToSection}
+            onSelect={setActiveSection}
           />
         </div>
 
-        <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
-          <aside className="hidden shrink-0 lg:block lg:w-56">
-            <nav className="sticky top-6 flex flex-col gap-1 rounded-xl border border-border bg-white p-3 shadow-sm">
-              <p className="px-3 pb-2 text-xs font-bold uppercase tracking-wide text-gray">On This Page</p>
-              {NAV_SECTIONS.map(({ id: sectionId, label, icon: Icon }) => (
-                <button
-                  key={sectionId}
-                  type="button"
-                  onClick={() => scrollToSection(sectionId)}
-                  className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
-                    activeSection === sectionId
-                      ? "bg-primary/10 text-primary"
-                      : "text-text-dark hover:bg-background"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {label}
-                </button>
-              ))}
-            </nav>
-          </aside>
-
-          <div className="min-w-0 max-w-3xl flex-1 space-y-6">
+        <div className="mt-6 min-w-0 max-w-3xl">
+        {activeSection === "complaint-info" && (
         <FormSection id="complaint-info" title="COMPLAINT INFORMATION">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <InfoField label="Description" value={complaint.description} fullWidth />
@@ -254,7 +256,7 @@ export default function ComplaintDetailPage() {
                     <button
                       key={index}
                       type="button"
-                      onClick={() => setActivePhoto(index)}
+                      onClick={() => setActivePhoto({ gallery: "original", index })}
                       className="group relative h-24 w-24 cursor-pointer overflow-hidden rounded-lg border border-border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                     >
                       <img
@@ -279,21 +281,63 @@ export default function ComplaintDetailPage() {
             {complaint.resolutionNotes && (
               <InfoField label="Resolution Notes" value={complaint.resolutionNotes} fullWidth />
             )}
+
+            {complaint.resolutionPhotos && complaint.resolutionPhotos.length > 0 && (
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold text-text-dark">
+                  Resolution Photos ({complaint.resolutionPhotos.length}) — submitted by the rider
+                </p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {complaint.resolutionPhotos.map((_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setActivePhoto({ gallery: "resolution", index })}
+                      className="group relative h-24 w-24 cursor-pointer overflow-hidden rounded-lg border border-border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <img
+                        src={getPlaceholderPhoto(index)}
+                        alt={`Resolution photo ${index + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/30">
+                        <ZoomIn className="h-5 w-5 text-white opacity-0 transition group-hover:opacity-100" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </FormSection>
+        )}
 
+        {activeSection === "assignment-payment" && (
         <FormSection id="assignment-payment" title="ASSIGNMENT & PAYMENT" tone="success" icon={Wallet}>
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div>
-                <FormField
-                  label="Timeline Status"
-                  type="select"
-                  value={statusInput}
-                  options={STATUS_OPTIONS}
-                  onChange={(value) => setStatusInput(value as ComplaintStatus)}
-                />
+            {isFinalized && (
+              <div className="mb-5 flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs font-semibold text-success">
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                This complaint is resolved and paid — all fields are locked.
               </div>
-              <div>
+            )}
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {isFinalized ? (
+                <InfoField label="Timeline Status" value={complaint.status} />
+              ) : (
+                <div>
+                  <FormField
+                    label="Timeline Status"
+                    type="select"
+                    value={statusInput}
+                    options={STATUS_OPTIONS}
+                    onChange={(value) => setStatusInput(value as ComplaintStatus)}
+                  />
+                </div>
+              )}
+              {isFinalized ? (
+                <InfoField label="Assign to Rider" value={complaint.assignedTo} />
+              ) : (
+                <div>
                 <FormField
                   label="Assign to Rider"
                   type="select"
@@ -311,16 +355,37 @@ export default function ComplaintDetailPage() {
                     Track {assignedRider.name}'s live location
                   </button>
                 )}
-              </div>
+                </div>
+              )}
+              {isFinalized ? (
+                <InfoField label="Amount to be Paid (PKR)" value={String(complaint.amountDue)} />
+              ) : (
               <FormField
                 label="Amount to be Paid (PKR)"
                 type="number"
                 value={amountDueInput}
                 onChange={setAmountDueInput}
               />
+              )}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-text-dark">Payment Status</label>
-                {complaint.amountDue > 0 ? (
+                {complaint.amountDue === 0 ? (
+                  <div className="flex h-11 items-center gap-2 rounded-lg border border-border bg-background px-3">
+                    <StatusBadge label="No Charge" tone="neutral" />
+                    <span className="flex items-center gap-1 text-xs text-gray">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      No amount due yet
+                    </span>
+                  </div>
+                ) : complaint.paymentStatus === "Paid" ? (
+                  <div className="flex h-11 items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3">
+                    <StatusBadge label="Paid" tone="paid" />
+                    <span className="flex items-center gap-1 text-xs text-success">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Payment confirmed — locked
+                    </span>
+                  </div>
+                ) : (
                   <>
                     <div className="flex items-center gap-2">
                       <select
@@ -347,14 +412,6 @@ export default function ComplaintDetailPage() {
                       </span>
                     )}
                   </>
-                ) : (
-                  <div className="flex h-11 items-center gap-2 rounded-lg border border-border bg-background px-3">
-                    <StatusBadge label="No Charge" tone="neutral" />
-                    <span className="flex items-center gap-1 text-xs text-gray">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      No amount due yet
-                    </span>
-                  </div>
                 )}
               </div>
             </div>
@@ -382,6 +439,7 @@ export default function ComplaintDetailPage() {
               </div>
             )}
 
+            {!isFinalized && (
             <div className="mt-6 flex items-center gap-4">
               <button
                 type="button"
@@ -398,8 +456,11 @@ export default function ComplaintDetailPage() {
                 </span>
               )}
             </div>
+            )}
         </FormSection>
+        )}
 
+        {activeSection === "client-info" && (
         <FormSection id="client-info" title="CLIENT INFORMATION" tone="secondary">
             {clientSummary ? (
               <>
@@ -422,7 +483,7 @@ export default function ComplaintDetailPage() {
               <p className="text-sm text-gray">No client record linked to this complaint.</p>
             )}
         </FormSection>
-          </div>
+        )}
         </div>
       </PageContainer>
 
@@ -433,8 +494,8 @@ export default function ComplaintDetailPage() {
         >
           <div className="relative max-w-lg" onClick={(event) => event.stopPropagation()}>
             <img
-              src={getPlaceholderPhoto(activePhoto)}
-              alt={`Complaint photo ${activePhoto + 1}`}
+              src={getPlaceholderPhoto(activePhoto.index)}
+              alt={`${activePhoto.gallery === "resolution" ? "Resolution" : "Complaint"} photo ${activePhoto.index + 1}`}
               className="max-h-[75vh] w-full rounded-xl object-contain shadow-2xl"
             />
             <button
@@ -446,7 +507,7 @@ export default function ComplaintDetailPage() {
               <X className="h-4 w-4" />
             </button>
 
-            {complaint.photoCount > 1 && (
+            {activeGalleryCount > 1 && (
               <div className="mt-4 flex items-center justify-center gap-4">
                 <button
                   type="button"
@@ -457,7 +518,7 @@ export default function ComplaintDetailPage() {
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <span className="text-sm font-semibold text-white">
-                  {activePhoto + 1} / {complaint.photoCount}
+                  {activePhoto.index + 1} / {activeGalleryCount}
                 </span>
                 <button
                   type="button"

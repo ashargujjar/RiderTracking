@@ -48,18 +48,17 @@ export default function ComplaintManagementPage() {
       <PageContainer width="hub">
         <p className="text-sm text-gray">Track, assign, and resolve customer complaints.</p>
 
-        <div className="mt-8 flex flex-wrap gap-5">
+        <div className="mt-8 flex flex-col gap-4">
           {LINK_CARDS.map(({ key, title, description, icon, tone, path, count }) => (
-            <div key={key} className="min-w-72 flex-1">
-              <LinkCard
-                title={title}
-                description={description}
-                icon={icon}
-                tone={tone}
-                count={count}
-                onClick={() => navigate(path)}
-              />
-            </div>
+            <LinkCard
+              key={key}
+              title={title}
+              description={description}
+              icon={icon}
+              tone={tone}
+              count={count}
+              onClick={() => navigate(path)}
+            />
           ))}
         </div>
       </PageContainer>
