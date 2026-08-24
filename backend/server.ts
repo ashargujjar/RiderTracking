@@ -8,6 +8,8 @@ import morgan from "morgan";
 import { connectDB } from "./db/connectDB";
 import adminRoutes from "./routes/admin.routes";
 import clientRoutes from "./routes/client.routes";
+import complaintRoutes from "./routes/complaint.routes";
+import coordinatesRoutes from "./routes/coordinates.routes";
 import riderRoutes from "./routes/rider.routes";
 import statsRoutes from "./routes/stats.routes";
 
@@ -26,6 +28,8 @@ app.get("/health", (_req, res) => {
 
 app.use("/admin", adminRoutes);
 app.use("/clients", clientRoutes);
+app.use("/complaints", complaintRoutes);
+app.use("/coordinates", coordinatesRoutes);
 app.use("/riders", riderRoutes);
 app.use("/stats", statsRoutes);
 

@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ClipboardList, Search } from "lucide-react";
+import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -9,11 +10,10 @@ import { LoadingState } from "../components/LoadingState";
 import { Pagination } from "../components/Pagination";
 import { StatusBadge } from "../components/StatusBadge";
 import { TableHead, TableShell } from "../components/TableShell";
-import { PAGE_SIZE_TABLE } from "../data/constants";
-import { useSimulatedLoading } from "../hooks/useSimulatedLoading";
-import { getClientUnpaidComplaints, MOCK_COMPLAINTS } from "../data/mockComplaints";
+import { getComplaints, type ComplaintListItem, type ComplaintsBucket } from "../api/complaintsApi";
+import { getRiders } from "../api/ridersApi";
 import { complaintStatusTone, paymentStatusTone } from "../data/statusStyles";
-import { MOCK_RIDERS } from "../data/mockRiders";
+import type { RiderRecord } from "../data/mockRiders";
 
 type SortMode = "none" | "unpaid-first" | "paid-first" | "date-newest" | "date-oldest" | "location-asc";
 
@@ -29,62 +29,81 @@ const COLUMNS = [
 export default function ComplaintListPage() {
   const navigate = useNavigate();
   const { status } = useParams<{ status: string }>();
-  const isCompleted = status === "completed";
-  const isLoading = useSimulatedLoading();
+  const bucket: ComplaintsBucket = status === "completed" ? "completed" : "pending";
+
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [riderFilter, setRiderFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortMode>("none");
 
-  const baseComplaints = useMemo(
-    () =>
-      MOCK_COMPLAINTS.filter((complaint) =>
-        isCompleted ? complaint.status === "Resolved" : complaint.status !== "Resolved",
-      ),
-    [isCompleted],
-  );
+  const [complaints, setComplaints] = useState<ComplaintListItem[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const complaints = useMemo(() => {
-    const trimmedQuery = query.trim().toLowerCase();
-    let list = baseComplaints.filter((complaint) => {
-      if (riderFilter !== "all" && complaint.assignedTo !== riderFilter) return false;
-      if (!trimmedQuery) return true;
-      return (
-        complaint.id === trimmedQuery ||
-        complaint.title.toLowerCase().includes(trimmedQuery) ||
-        complaint.site.toLowerCase().includes(trimmedQuery)
-      );
+  // Only the first page of riders is fetched for this filter dropdown — fine
+  // while rider counts are small, but it'll silently miss riders once there
+  // are more than fit on one page.
+  const [riders, setRiders] = useState<RiderRecord[]>([]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [bucket]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSearch(query.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    getRiders(1).then((data) => setRiders(data.riders)).catch(() => {
+      // Non-fatal — the rider filter just won't have options.
     });
+  }, []);
+
+  useEffect(() => {
+    setIsLoading(true);
+    getComplaints(page, { search, bucket, riderId: riderFilter === "all" ? undefined : riderFilter })
+      .then((data) => {
+        setComplaints(data.complaints);
+        setTotalPages(data.totalPages);
+        setTotalCount(data.totalCount);
+      })
+      .catch(() => toast.error("Failed to load complaints"))
+      .finally(() => setIsLoading(false));
+  }, [page, search, bucket, riderFilter]);
+
+  const sortedComplaints = useMemo(() => {
+    if (sortBy === "none") return complaints;
+    const list = [...complaints];
 
     if (sortBy === "unpaid-first" || sortBy === "paid-first") {
-      const rank = (complaint: (typeof list)[number]) => {
+      const rank = (complaint: ComplaintListItem) => {
         if (complaint.amountDue === 0) return 2;
         const isUnpaid = complaint.paymentStatus === "Unpaid";
         if (sortBy === "unpaid-first") return isUnpaid ? 0 : 1;
         return isUnpaid ? 1 : 0;
       };
-      list = [...list].sort((a, b) => rank(a) - rank(b));
+      list.sort((a, b) => rank(a) - rank(b));
     } else if (sortBy === "date-newest") {
-      list = [...list].sort((a, b) => b.raisedDate.localeCompare(a.raisedDate));
+      list.sort((a, b) => b.raisedDate.localeCompare(a.raisedDate));
     } else if (sortBy === "date-oldest") {
-      list = [...list].sort((a, b) => a.raisedDate.localeCompare(b.raisedDate));
+      list.sort((a, b) => a.raisedDate.localeCompare(b.raisedDate));
     } else if (sortBy === "location-asc") {
-      list = [...list].sort((a, b) => a.site.localeCompare(b.site));
+      list.sort((a, b) => a.site.localeCompare(b.site));
     }
 
     return list;
-  }, [baseComplaints, query, riderFilter, sortBy]);
+  }, [complaints, sortBy]);
 
-  const totalPages = Math.max(1, Math.ceil(complaints.length / PAGE_SIZE_TABLE));
-  const currentPage = Math.min(page, totalPages);
-  const pageItems = complaints.slice((currentPage - 1) * PAGE_SIZE_TABLE, currentPage * PAGE_SIZE_TABLE);
-
-  const title = isCompleted ? "Completed / Closed Complaints" : "Pending Complaints";
-  const unpaidCount = baseComplaints.filter(
+  const title = bucket === "completed" ? "Completed / Closed Complaints" : "Pending Complaints";
+  const unpaidCount = complaints.filter(
     (complaint) => complaint.amountDue > 0 && complaint.paymentStatus === "Unpaid",
   ).length;
-
-  const resetToFirstPage = () => setPage(1);
 
   return (
     <>
@@ -100,9 +119,10 @@ export default function ComplaintListPage() {
           <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-lg font-bold text-text-darker">
-            {complaints.length} complaint{complaints.length === 1 ? "" : "s"}
+            {totalCount} complaint{totalCount === 1 ? "" : "s"}
+            {search && ` matching "${search}"`}
           </p>
-          {!isCompleted && unpaidCount > 0 && (
+          {bucket === "pending" && unpaidCount > 0 && (
             <span className="flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-xs font-bold text-warning">
               <AlertTriangle className="h-3.5 w-3.5" />
               {unpaidCount} unpaid
@@ -115,10 +135,7 @@ export default function ComplaintListPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray" />
             <input
               value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                resetToFirstPage();
-              }}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search by ID, title, or site..."
               className="h-10 w-full rounded-lg border border-border bg-white pl-9 pr-3 text-sm text-text-darker outline-none placeholder:text-gray focus:border-primary"
             />
@@ -128,15 +145,15 @@ export default function ComplaintListPage() {
             value={riderFilter}
             onChange={(event) => {
               setRiderFilter(event.target.value);
-              resetToFirstPage();
+              setPage(1);
             }}
             aria-label="Filter by rider"
             className="h-10 rounded-lg border border-border bg-white px-3 text-sm text-text-darker outline-none focus:border-primary"
           >
             <option value="all">All riders</option>
-            <option value="Unassigned">Unassigned</option>
-            {MOCK_RIDERS.map((rider) => (
-              <option key={rider.id} value={rider.name}>
+            <option value="unassigned">Unassigned</option>
+            {riders.map((rider) => (
+              <option key={rider.id} value={rider.id}>
                 {rider.name}
               </option>
             ))}
@@ -144,10 +161,7 @@ export default function ComplaintListPage() {
 
           <select
             value={sortBy}
-            onChange={(event) => {
-              setSortBy(event.target.value as SortMode);
-              resetToFirstPage();
-            }}
+            onChange={(event) => setSortBy(event.target.value as SortMode)}
             aria-label="Sort complaints"
             className="h-10 rounded-lg border border-border bg-white px-3 text-sm text-text-darker outline-none focus:border-primary"
           >
@@ -164,43 +178,40 @@ export default function ComplaintListPage() {
           <TableShell>
             <TableHead columns={COLUMNS} />
             <tbody>
-              {pageItems.map((complaint) => {
-                const hasOtherUnpaid = getClientUnpaidComplaints(complaint.clientId, complaint.id).length > 0;
-                return (
-                  <tr
-                    key={complaint.id}
-                    onClick={() => navigate(`/dashboard/complaints/${complaint.id}/view`)}
-                    className="cursor-pointer border-t border-border transition hover:bg-background"
-                  >
-                    <td className="px-4 py-3 font-semibold text-text-darker">{complaint.title}</td>
-                    <td className="px-4 py-3 text-text-dark">{complaint.site}</td>
-                    <td className="px-4 py-3 text-text-dark">{complaint.assignedTo}</td>
-                    <td className="px-4 py-3 text-text-dark">{complaint.raisedDate}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge label={complaint.status} tone={complaintStatusTone(complaint.status)} />
-                    </td>
-                    <td className="px-4 py-3">
-                      {complaint.amountDue > 0 ? (
-                        <div className="flex items-center gap-1.5">
-                          <StatusBadge
-                            label={complaint.paymentStatus}
-                            tone={paymentStatusTone(complaint.paymentStatus)}
+              {sortedComplaints.map((complaint) => (
+                <tr
+                  key={complaint.id}
+                  onClick={() => navigate(`/dashboard/complaints/${complaint.id}/view`)}
+                  className="cursor-pointer border-t border-border transition hover:bg-background"
+                >
+                  <td className="px-4 py-3 font-semibold text-text-darker">{complaint.title}</td>
+                  <td className="px-4 py-3 text-text-dark">{complaint.site}</td>
+                  <td className="px-4 py-3 text-text-dark">{complaint.assignedTo ?? "Unassigned"}</td>
+                  <td className="px-4 py-3 text-text-dark">{complaint.raisedDate.slice(0, 10)}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge label={complaint.status} tone={complaintStatusTone(complaint.status)} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {complaint.amountDue > 0 ? (
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge
+                          label={complaint.paymentStatus}
+                          tone={paymentStatusTone(complaint.paymentStatus)}
+                        />
+                        {complaint.hasOtherUnpaid && (
+                          <AlertTriangle
+                            className="h-3.5 w-3.5 shrink-0 text-warning"
+                            aria-label="Client has other unpaid complaints"
                           />
-                          {hasOtherUnpaid && (
-                            <AlertTriangle
-                              className="h-3.5 w-3.5 shrink-0 text-warning"
-                              aria-label="Client has other unpaid complaints"
-                            />
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {pageItems.length === 0 && (
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {sortedComplaints.length === 0 && (
                 <tr>
                   <td colSpan={COLUMNS.length}>
                     <EmptyState icon={ClipboardList} title="No complaints found." variant="inline" />
@@ -211,7 +222,7 @@ export default function ComplaintListPage() {
           </TableShell>
         </div>
 
-        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setPage} />
+        <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
           </>
         )}
       </PageContainer>

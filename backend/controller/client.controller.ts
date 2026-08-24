@@ -1,9 +1,15 @@
 import type { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { isValidObjectId, mongo } from "mongoose";
 import { ZodError } from "zod";
 
 import { Client } from "../model/client.model";
-import { createClientSchema, editClientSchema, listClientsQuerySchema } from "../schemas/client.zod";
+import {
+  clientLoginSchema,
+  createClientSchema,
+  editClientSchema,
+  listClientsQuerySchema,
+} from "../schemas/client.zod";
 
 function isDuplicateUsernameError(error: unknown): boolean {
   return (
@@ -33,6 +39,35 @@ export async function createClient(req: Request, res: Response) {
     }
     console.error("Failed to create client:", error);
     res.status(500).json({ success: false, message: "Failed to create client" });
+  }
+}
+
+export async function login(req: Request, res: Response) {
+  try {
+    const { username, password } = clientLoginSchema.parse(req.body);
+
+    const client = await Client.login(username, password);
+    if (!client) {
+      res.status(401).json({ success: false, message: "Invalid username or password" });
+      return;
+    }
+
+    const token = jwt.sign(
+      { id: client._id.toString(), role: "client" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "30d" }
+    );
+
+    res.status(200).json({ success: true, token, client });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Client login failed:", error);
+    res.status(500).json({ success: false, message: "Login failed" });
   }
 }
 

@@ -1,15 +1,24 @@
+import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
 import { LinkCard } from "../components/LinkCard";
+import { getStats } from "../api/statsApi";
 import { MOCK_COMPLAINTS } from "../data/mockComplaints";
 
 export default function ComplaintManagementPage() {
   const navigate = useNavigate();
+  const [pendingCount, setPendingCount] = useState(0);
 
-  const pendingCount = MOCK_COMPLAINTS.filter((complaint) => complaint.status !== "Resolved").length;
+  useEffect(() => {
+    getStats()
+      .then((stats) => setPendingCount(stats.pendingComplaints))
+      .catch(() => toast.error("Failed to load pending complaints count"));
+  }, []);
+
   const completedCount = MOCK_COMPLAINTS.filter((complaint) => complaint.status === "Resolved").length;
 
   const LINK_CARDS = [

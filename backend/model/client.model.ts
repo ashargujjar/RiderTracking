@@ -39,9 +39,16 @@ function buildSearchFilter(search: string): FilterQuery<ClientDocument> {
 export class Client {
   static async createClient(input: CreateClientInput) {
     const client = await ClientSchema.create(input);
-    const obj = client.toObject();
-    const { password, ...clientInfoSafe } = obj.client;
-    return { ...obj, client: clientInfoSafe };
+    return client.toObject();
+  }
+
+  static async login(username: string, password: string) {
+    const client = await ClientSchema.findOne({ "client.username": username });
+    if (!client) return null;
+
+    if (client.client.password !== password) return null;
+
+    return client.toObject();
   }
 
   static async getAllClients(page: number, search?: string) {
@@ -61,17 +68,13 @@ export class Client {
       whatsappChecks.map((check) => [check.clientId.toString(), check.sent])
     );
 
-    const safeClients = clients.map(({ client, ...rest }) => {
-      const { password, ...clientInfoSafe } = client;
-      return {
-        ...rest,
-        client: clientInfoSafe,
-        whatsappSent: sentByClientId.get(rest._id.toString()) ?? false,
-      };
-    });
+    const clientsWithWhatsapp = clients.map((client) => ({
+      ...client,
+      whatsappSent: sentByClientId.get(client._id.toString()) ?? false,
+    }));
 
     return {
-      clients: safeClients,
+      clients: clientsWithWhatsapp,
       currentPage: page,
       totalPages: Math.max(1, Math.ceil(totalCount / CLIENTS_PAGE_SIZE)),
       totalCount,
@@ -82,8 +85,7 @@ export class Client {
     const client = await ClientSchema.findById(id).lean();
     if (!client) return null;
 
-    const { password, ...clientInfoSafe } = client.client;
-    return { ...client, client: clientInfoSafe };
+    return client;
   }
 
   static async editClient(id: string, input: EditClientInput) {
@@ -99,9 +101,7 @@ export class Client {
     }
 
     await client.save();
-    const obj = client.toObject();
-    const { password, ...clientInfoSafe } = obj.client;
-    return { ...obj, client: clientInfoSafe };
+    return client.toObject();
   }
 
   static async deleteClient(id: string) {
@@ -109,8 +109,6 @@ export class Client {
     if (!client) return null;
 
     await client.deleteOne();
-    const obj = client.toObject();
-    const { password, ...clientInfoSafe } = obj.client;
-    return { ...obj, client: clientInfoSafe };
+    return client.toObject();
   }
 }

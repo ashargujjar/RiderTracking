@@ -1,4 +1,4 @@
-import type { ComplaintStatus, PaymentStatus } from "./mockComplaints";
+import type { PaymentStatus } from "./mockComplaints";
 
 export type StatusTone =
   | "pending"
@@ -19,9 +19,15 @@ export const STATUS_TONE_STYLES: Record<StatusTone, string> = {
   neutral: "bg-gray/15 text-gray",
 };
 
-export function complaintStatusTone(status: ComplaintStatus): StatusTone {
+// Accepts a plain string rather than a specific ComplaintStatus type since callers
+// pull complaint statuses from two overlapping enums as the app migrates off mock
+// data — the old 4-value mock set ("In Progress") and the real backend's 6-value
+// set (Assigned/On The Way/Arrived, all still "in progress" from a display POV).
+export function complaintStatusTone(status: string): StatusTone {
   if (status === "Pending") return "pending";
-  if (status === "In Progress") return "in-progress";
+  if (status === "In Progress" || status === "Assigned" || status === "On The Way" || status === "Arrived") {
+    return "in-progress";
+  }
   if (status === "Pending Approval") return "pending-approval";
   return "resolved";
 }

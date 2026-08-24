@@ -107,3 +107,10 @@ export const listClientsQuerySchema = z.object({
 });
 
 export type ListClientsQuery = z.infer<typeof listClientsQuerySchema>;
+
+export const clientLoginSchema = z.object({
+  username: z.string().trim().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export type ClientLoginInput = z.infer<typeof clientLoginSchema>;
