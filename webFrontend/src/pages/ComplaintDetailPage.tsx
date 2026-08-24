@@ -224,6 +224,9 @@ export default function ComplaintDetailPage() {
   const isFinalized =
     complaint.status === "Resolved" && (complaint.amountDue === 0 || complaint.paymentStatus === "Paid");
 
+  const parsedAmountDue = Math.max(0, Math.round(Number(amountDueInput) || 0));
+  const totalPayable = parsedAmountDue + complaint.carriedOverDue;
+
   const activeGallery = activePhoto?.gallery === "resolution" ? complaint.resolutionPhotos : complaint.photos;
 
   const showPrev = () =>
@@ -305,6 +308,26 @@ export default function ComplaintDetailPage() {
                 {complaint.resolvedDate && (
                   <InfoField label="Resolved Date" value={complaint.resolvedDate.slice(0, 10)} />
                 )}
+
+                {complaint.timeline.length > 0 && (
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-semibold text-text-dark">Status Timeline</p>
+                    <div className="mt-2 flex flex-col gap-2.5 border-l-2 border-border pl-4">
+                      {complaint.timeline.map((event, index) => (
+                        <div key={`${event.status}-${event.at}-${index}`} className="flex items-center gap-3">
+                          <StatusBadge label={event.status} tone={complaintStatusTone(event.status)} />
+                          <span className="text-xs text-gray">
+                            {new Date(event.at).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {complaint.resolutionNotes && (
                   <InfoField label="Resolution Notes" value={complaint.resolutionNotes} fullWidth />
                 )}
@@ -381,7 +404,10 @@ export default function ComplaintDetailPage() {
                     onChange={setAmountDueInput}
                   />
                 )}
-                <InfoField label="Total Amount (PKR)" value={complaint.totalAmount.toLocaleString()} />
+                <InfoField
+                  label="Total Amount (PKR)"
+                  value={(isFinalized ? complaint.totalAmount : totalPayable).toLocaleString()}
+                />
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-text-dark">Payment Status</label>
@@ -431,6 +457,31 @@ export default function ComplaintDetailPage() {
                   )}
                 </div>
               </div>
+
+              {(parsedAmountDue > 0 || complaint.carriedOverDue > 0) && (
+                <div className="mt-5 rounded-lg border border-border bg-background p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-text-dark">Amount Summary</p>
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <span className="text-text-dark">This complaint's charge</span>
+                    <span className="font-semibold text-text-darker">PKR {parsedAmountDue.toLocaleString()}</span>
+                  </div>
+                  {complaint.carriedOverDue > 0 && (
+                    <div className="mt-1.5 flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-warning">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Carried over from unpaid history
+                      </span>
+                      <span className="font-semibold text-warning">
+                        PKR {complaint.carriedOverDue.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                    <span className="text-sm font-bold text-text-darker">Total payable</span>
+                    <span className="text-lg font-bold text-primary">PKR {totalPayable.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
 
               {!isFinalized && (
                 <div className="mt-6 flex items-center gap-4">

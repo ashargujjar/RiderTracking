@@ -87,6 +87,9 @@ export type ComplaintDetail = {
   totalAmount: number;
   amountDue: number;
   paymentStatus: PaymentStatus;
+  // Sum of amountDue still owed on this client's OTHER unpaid complaints —
+  // computed live server-side, not stored on this complaint.
+  carriedOverDue: number;
   client: {
     id: string;
     site: string;
@@ -134,7 +137,6 @@ export async function getComplaintById(id: string): Promise<ComplaintDetail> {
 export type UpdateComplaintPayload = {
   status?: ComplaintStatus;
   assignedTo?: string | null;
-  totalAmount?: number;
   amountDue?: number;
   paymentStatus?: PaymentStatus;
 };

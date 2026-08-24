@@ -67,3 +67,46 @@ export async function getRiderById(id: string): Promise<RiderRecord> {
   const data = await apiFetch<{ success: boolean; rider: ApiRiderDoc }>(`/riders/${id}`);
   return toRiderRecord(data.rider);
 }
+
+export type RiderTrackingJob = {
+  id: string;
+  title: string;
+  status: string;
+  raisedDate: string;
+  site: string;
+  coordinates: { latitude: number; longitude: number } | null;
+};
+
+export type RiderTracking = {
+  location: { latitude: number; longitude: number; updatedAt: string } | null;
+  jobs: RiderTrackingJob[];
+};
+
+type ApiRiderTrackingJob = Omit<RiderTrackingJob, "id"> & { id: number };
+
+export async function getRiderTracking(id: string): Promise<RiderTracking> {
+  const data = await apiFetch<{ success: boolean; location: RiderTracking["location"]; jobs: ApiRiderTrackingJob[] }>(
+    `/riders/${id}/tracking`,
+  );
+  return {
+    location: data.location,
+    jobs: data.jobs.map((job) => ({ ...job, id: String(job.id) })),
+  };
+}
+
+export type RiderOrderStats = {
+  assignedCount: number;
+  totalCompletedCount: number;
+  monthlyCompletedCount: number;
+  previousMonthCompletedCount: number;
+};
+
+export async function getRiderStats(id: string): Promise<RiderOrderStats> {
+  const data = await apiFetch<{ success: boolean } & RiderOrderStats>(`/riders/${id}/stats`);
+  return {
+    assignedCount: data.assignedCount,
+    totalCompletedCount: data.totalCompletedCount,
+    monthlyCompletedCount: data.monthlyCompletedCount,
+    previousMonthCompletedCount: data.previousMonthCompletedCount,
+  };
+}

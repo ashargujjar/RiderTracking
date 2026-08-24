@@ -22,7 +22,8 @@ export const updateComplaintSchema = z
   .object({
     status: z.enum(COMPLAINT_STATUSES).optional(),
     assignedTo: z.string().trim().min(1).nullable().optional(),
-    totalAmount: z.coerce.number().min(0).optional(),
+    // totalAmount is intentionally not settable here — it's always derived
+    // server-side from amountDue plus the client's other carried-over dues.
     amountDue: z.coerce.number().min(0).optional(),
     paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
   })

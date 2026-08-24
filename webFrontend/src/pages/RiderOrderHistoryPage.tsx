@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Bike, ChevronLeft, ClipboardList } from "lucide-react";
+import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -9,9 +10,8 @@ import { LoadingState } from "../components/LoadingState";
 import { Pagination } from "../components/Pagination";
 import { StatusBadge } from "../components/StatusBadge";
 import { TableHead, TableShell } from "../components/TableShell";
-import { PAGE_SIZE_TABLE } from "../data/constants";
 import { getRiderById } from "../api/ridersApi";
-import { MOCK_COMPLAINTS } from "../data/mockComplaints";
+import { getComplaints, type ComplaintListItem } from "../api/complaintsApi";
 import { complaintStatusTone, paymentStatusTone } from "../data/statusStyles";
 import type { RiderRecord } from "../data/mockRiders";
 
@@ -30,36 +30,52 @@ export default function RiderOrderHistoryPage() {
   const navigate = useNavigate();
   const { id, filter } = useParams<{ id: string; filter: string }>();
   const [rider, setRider] = useState<RiderRecord | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingRider, setIsLoadingRider] = useState(true);
   const filterMode: FilterMode = filter === "completed" ? "completed" : "assigned";
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<SortMode>("date-newest");
+
+  const [complaints, setComplaints] = useState<ComplaintListItem[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     getRiderById(id)
       .then(setRider)
       .catch(() => setRider(null))
-      .finally(() => setIsLoading(false));
+      .finally(() => setIsLoadingRider(false));
   }, [id]);
 
-  const complaints = useMemo(() => {
-    if (!rider) return [];
-    let list = MOCK_COMPLAINTS.filter((complaint) => complaint.assignedTo === rider.name);
-    if (filterMode === "completed") list = list.filter((complaint) => complaint.status === "Resolved");
+  useEffect(() => {
+    setPage(1);
+  }, [filterMode]);
 
-    if (sortBy === "date-newest") list = [...list].sort((a, b) => b.raisedDate.localeCompare(a.raisedDate));
-    else if (sortBy === "date-oldest") list = [...list].sort((a, b) => a.raisedDate.localeCompare(b.raisedDate));
-    else if (sortBy === "status") list = [...list].sort((a, b) => a.status.localeCompare(b.status));
+  useEffect(() => {
+    if (!id) return;
+    setIsLoadingOrders(true);
+    // "assigned" = every order ever assigned to this rider, any status (no
+    // bucket filter); "completed" = just the resolved subset.
+    getComplaints(page, { riderId: id, bucket: filterMode === "completed" ? "completed" : undefined })
+      .then((data) => {
+        setComplaints(data.complaints);
+        setTotalPages(data.totalPages);
+        setTotalCount(data.totalCount);
+      })
+      .catch(() => toast.error("Failed to load rider orders"))
+      .finally(() => setIsLoadingOrders(false));
+  }, [id, page, filterMode]);
 
+  const sortedComplaints = useMemo(() => {
+    const list = [...complaints];
+    if (sortBy === "date-newest") list.sort((a, b) => b.raisedDate.localeCompare(a.raisedDate));
+    else if (sortBy === "date-oldest") list.sort((a, b) => a.raisedDate.localeCompare(b.raisedDate));
+    else if (sortBy === "status") list.sort((a, b) => a.status.localeCompare(b.status));
     return list;
-  }, [rider, filterMode, sortBy]);
+  }, [complaints, sortBy]);
 
-  const totalPages = Math.max(1, Math.ceil(complaints.length / PAGE_SIZE_TABLE));
-  const currentPage = Math.min(page, totalPages);
-  const pageItems = complaints.slice((currentPage - 1) * PAGE_SIZE_TABLE, currentPage * PAGE_SIZE_TABLE);
-
-  if (isLoading) {
+  if (isLoadingRider) {
     return (
       <>
         <PageHeader title="Rider Orders" breadcrumbs={[{ label: "Dashboard", to: "/dashboard" }, { label: "Riders", to: "/dashboard/riders" }]} />
@@ -109,70 +125,75 @@ export default function RiderOrderHistoryPage() {
           Back to rider profile
         </button>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-lg font-bold text-text-darker">
-            {complaints.length} order{complaints.length === 1 ? "" : "s"}
-          </p>
-          <select
-            value={sortBy}
-            onChange={(event) => {
-              setSortBy(event.target.value as SortMode);
-              setPage(1);
-            }}
-            aria-label="Sort orders"
-            className="h-10 rounded-lg border border-border bg-white px-3 text-sm text-text-darker outline-none focus:border-primary"
-          >
-            <option value="date-newest">Sort: date (newest)</option>
-            <option value="date-oldest">Sort: date (oldest)</option>
-            <option value="status">Sort: status</option>
-          </select>
-        </div>
+        {isLoadingOrders ? (
+          <div className="mt-4">
+            <LoadingState />
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-lg font-bold text-text-darker">
+                {totalCount} order{totalCount === 1 ? "" : "s"}
+              </p>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as SortMode)}
+                aria-label="Sort orders"
+                className="h-10 rounded-lg border border-border bg-white px-3 text-sm text-text-darker outline-none focus:border-primary"
+              >
+                <option value="date-newest">Sort: date (newest)</option>
+                <option value="date-oldest">Sort: date (oldest)</option>
+                <option value="status">Sort: status</option>
+              </select>
+            </div>
 
-        <div className="mt-5">
-          <TableShell>
-            <TableHead columns={COLUMNS} />
-            <tbody>
-              {pageItems.map((complaint) => (
-                <tr
-                  key={complaint.id}
-                  onClick={() => navigate(`/dashboard/complaints/${complaint.id}/view`)}
-                  className="cursor-pointer border-t border-border transition hover:bg-background"
-                >
-                  <td className="px-4 py-3 font-semibold text-text-darker">{complaint.title}</td>
-                  <td className="px-4 py-3 text-text-dark">{complaint.site}</td>
-                  <td className="px-4 py-3 text-text-dark">{complaint.raisedDate}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge label={complaint.status} tone={complaintStatusTone(complaint.status)} />
-                  </td>
-                  <td className="px-4 py-3">
-                    {complaint.amountDue > 0 ? (
-                      <StatusBadge label={complaint.paymentStatus} tone={paymentStatusTone(complaint.paymentStatus)} />
-                    ) : (
-                      <span className="text-xs text-gray">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {pageItems.length === 0 && (
-                <tr>
-                  <td colSpan={COLUMNS.length}>
-                    <EmptyState
-                      icon={ClipboardList}
-                      title={
-                        filterMode === "completed"
-                          ? "No completed orders yet."
-                          : "No orders assigned to this rider yet."
-                      }
-                      variant="inline"
-                    />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </TableShell>
-        </div>
+            <div className="mt-5">
+              <TableShell>
+                <TableHead columns={COLUMNS} />
+                <tbody>
+                  {sortedComplaints.map((complaint) => (
+                    <tr
+                      key={complaint.id}
+                      onClick={() => navigate(`/dashboard/complaints/${complaint.id}/view`)}
+                      className="cursor-pointer border-t border-border transition hover:bg-background"
+                    >
+                      <td className="px-4 py-3 font-semibold text-text-darker">{complaint.title}</td>
+                      <td className="px-4 py-3 text-text-dark">{complaint.site}</td>
+                      <td className="px-4 py-3 text-text-dark">{complaint.raisedDate.slice(0, 10)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge label={complaint.status} tone={complaintStatusTone(complaint.status)} />
+                      </td>
+                      <td className="px-4 py-3">
+                        {complaint.amountDue > 0 ? (
+                          <StatusBadge label={complaint.paymentStatus} tone={paymentStatusTone(complaint.paymentStatus)} />
+                        ) : (
+                          <span className="text-xs text-gray">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {sortedComplaints.length === 0 && (
+                    <tr>
+                      <td colSpan={COLUMNS.length}>
+                        <EmptyState
+                          icon={ClipboardList}
+                          title={
+                            filterMode === "completed"
+                              ? "No completed orders yet."
+                              : "No orders assigned to this rider yet."
+                          }
+                          variant="inline"
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </TableShell>
+            </div>
 
-        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setPage} />
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+          </>
+        )}
       </PageContainer>
     </>
   );

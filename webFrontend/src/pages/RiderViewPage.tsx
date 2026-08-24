@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Bike,
+  CalendarClock,
   ChevronRight,
   ClipboardList,
   KeyRound,
@@ -12,14 +13,14 @@ import {
   Tag,
   TrendingUp,
 } from "lucide-react";
+import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { FormSection } from "../components/FormSection";
 import { LoadingState } from "../components/LoadingState";
-import { getRiderById } from "../api/ridersApi";
-import { getRiderOrderStats } from "../data/mockComplaints";
+import { getRiderById, getRiderStats, type RiderOrderStats } from "../api/ridersApi";
 import type { RiderRecord } from "../data/mockRiders";
 
 function InfoField({ label, value }: { label: string; value: string }) {
@@ -35,6 +36,7 @@ export default function RiderViewPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [rider, setRider] = useState<RiderRecord | null>(null);
+  const [stats, setStats] = useState<RiderOrderStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -45,7 +47,12 @@ export default function RiderViewPage() {
       .finally(() => setIsLoading(false));
   }, [id]);
 
-  const stats = getRiderOrderStats(rider?.name ?? "");
+  useEffect(() => {
+    if (!id) return;
+    getRiderStats(id)
+      .then(setStats)
+      .catch(() => toast.error("Failed to load rider order stats"));
+  }, [id]);
 
   if (isLoading) {
     return (
@@ -78,9 +85,10 @@ export default function RiderViewPage() {
   }
 
   const STAT_TILES = [
-    { key: "assigned", label: "Assigned Orders", value: stats.assignedCount, icon: ClipboardList, accent: "text-primary bg-primary/10" },
-    { key: "totalCompleted", label: "Total Completed Orders", value: stats.totalCompletedCount, icon: ListChecks, accent: "text-success bg-success/10" },
-    { key: "monthlyCompleted", label: "Completed This Month", value: stats.monthlyCompletedCount, icon: TrendingUp, accent: "text-secondary bg-secondary/10" },
+    { key: "assigned", label: "Assigned Orders", value: stats?.assignedCount ?? 0, icon: ClipboardList, accent: "text-primary bg-primary/10" },
+    { key: "totalCompleted", label: "Total Completed Orders", value: stats?.totalCompletedCount ?? 0, icon: ListChecks, accent: "text-success bg-success/10" },
+    { key: "monthlyCompleted", label: "Completed This Month", value: stats?.monthlyCompletedCount ?? 0, icon: TrendingUp, accent: "text-secondary bg-secondary/10" },
+    { key: "previousMonthCompleted", label: "Completed Last Month", value: stats?.previousMonthCompletedCount ?? 0, icon: CalendarClock, accent: "text-gray bg-gray/10" },
   ];
 
   const ORDER_LINKS = [

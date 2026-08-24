@@ -1,22 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Bike, ChevronRight, Clock, MapPin, Navigation, Radio } from "lucide-react";
+import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { StatusBadge } from "../components/StatusBadge";
-import { getRiderById } from "../api/ridersApi";
+import { getRiderById, getRiderTracking, type RiderTracking } from "../api/ridersApi";
 import type { RiderRecord } from "../data/mockRiders";
-import { COMPLAINT_LOCATIONS, RIDER_BASE_LOCATIONS, getRiderQueue, type LatLng } from "../data/mockTracking";
 import { complaintStatusTone } from "../data/statusStyles";
-import { useLiveRiderPosition } from "../hooks/useLiveRiderPosition";
 import { estimateEtaMinutes, haversineKm } from "../utils/geo";
 
+type LatLng = [number, number];
+
+// Used only when there's no better anchor yet (no live rider fix, no job with
+// a pinned client location) so the map still has somewhere to open.
 const FALLBACK_POSITION: LatLng = [31.5497, 74.3436];
 
 function riderIcon() {
@@ -63,20 +66,22 @@ export default function RiderTrackingPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [rider, setRider] = useState<RiderRecord | null>(null);
+  const [tracking, setTracking] = useState<RiderTracking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
-    getRiderById(id)
-      .then(setRider)
-      .catch(() => setRider(null))
+    Promise.all([getRiderById(id), getRiderTracking(id)])
+      .then(([riderData, trackingData]) => {
+        setRider(riderData);
+        setTracking(trackingData);
+      })
+      .catch(() => {
+        setRider(null);
+        toast.error("Failed to load rider tracking");
+      })
       .finally(() => setIsLoading(false));
   }, [id]);
-
-  const base = (rider && RIDER_BASE_LOCATIONS[rider.id]) || FALLBACK_POSITION;
-  const { position, updatedAt } = useLiveRiderPosition(base);
-  const queue = useMemo(() => (rider ? getRiderQueue(rider) : []), [rider]);
-  const stops = queue.map((complaint) => ({ complaint, location: COMPLAINT_LOCATIONS[complaint.id] }));
 
   if (isLoading) {
     return (
@@ -92,7 +97,7 @@ export default function RiderTrackingPage() {
     );
   }
 
-  if (!rider) {
+  if (!rider || !tracking) {
     return (
       <>
         <PageHeader
@@ -111,7 +116,16 @@ export default function RiderTrackingPage() {
     );
   }
 
-  const allPoints: LatLng[] = [position, ...stops.map((stop) => stop.location)];
+  const riderPosition: LatLng | null = tracking.location
+    ? [tracking.location.latitude, tracking.location.longitude]
+    : null;
+
+  const stops = tracking.jobs
+    .filter((job) => job.coordinates !== null)
+    .map((job) => ({ job, location: [job.coordinates!.latitude, job.coordinates!.longitude] as LatLng }));
+
+  const mapCenter = riderPosition ?? stops[0]?.location ?? FALLBACK_POSITION;
+  const allPoints: LatLng[] = riderPosition ? [riderPosition, ...stops.map((stop) => stop.location)] : stops.map((stop) => stop.location);
 
   return (
     <>
@@ -134,36 +148,50 @@ export default function RiderTrackingPage() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs font-semibold text-success">
-              <Radio className="h-3 w-3 animate-pulse" />
-              Live
-            </span>
+            {riderPosition ? (
+              <span className="flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs font-semibold text-success">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Live
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-full bg-gray/15 px-2.5 py-1 text-xs font-semibold text-gray">
+                <Radio className="h-3 w-3" />
+                No live location yet
+              </span>
+            )}
             <StatusBadge
-              label={queue.length > 0 ? `${queue.length} job${queue.length === 1 ? "" : "s"} queued` : "Idle"}
-              tone={queue.length > 0 ? "in-progress" : "neutral"}
+              label={tracking.jobs.length > 0 ? `${tracking.jobs.length} job${tracking.jobs.length === 1 ? "" : "s"} queued` : "Idle"}
+              tone={tracking.jobs.length > 0 ? "in-progress" : "neutral"}
             />
           </div>
         </div>
-        <p className="mt-1 flex items-center gap-1.5 text-xs text-gray">
-          <Clock className="h-3.5 w-3.5" />
-          Last updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-        </p>
+        {tracking.location && (
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-gray">
+            <Clock className="h-3.5 w-3.5" />
+            Last updated{" "}
+            {new Date(tracking.location.updatedAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </p>
+        )}
 
         <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
           <div className="h-105 min-w-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm md:h-130">
-            <MapContainer center={position} zoom={13} scrollWheelZoom className="h-full w-full">
+            <MapContainer center={mapCenter} zoom={13} scrollWheelZoom className="h-full w-full">
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <FitBounds points={allPoints} />
-              <Marker position={position} icon={riderIcon()} />
+              {riderPosition && <Marker position={riderPosition} icon={riderIcon()} />}
               {stops.map((stop, index) => (
-                <Marker key={stop.complaint.id} position={stop.location} icon={stopIcon(index + 1, index === 0)} />
+                <Marker key={stop.job.id} position={stop.location} icon={stopIcon(index + 1, index === 0)} />
               ))}
-              {stops.length > 0 && (
+              {riderPosition && stops.length > 0 && (
                 <Polyline
-                  positions={[position, ...stops.map((stop) => stop.location)]}
+                  positions={[riderPosition, ...stops.map((stop) => stop.location)]}
                   pathOptions={{ color: "#5b9bd5", weight: 3, dashArray: "6 8" }}
                 />
               )}
@@ -172,17 +200,18 @@ export default function RiderTrackingPage() {
 
           <div className="w-full shrink-0 space-y-3 lg:w-80">
             <p className="text-xs font-bold uppercase tracking-wide text-text-dark">Job Queue</p>
-            {stops.length === 0 ? (
+            {tracking.jobs.length === 0 ? (
               <EmptyState icon={MapPin} title="No active jobs assigned." variant="card" />
             ) : (
-              stops.map((stop, index) => {
-                const distanceKm = haversineKm(position, stop.location);
-                const etaMin = estimateEtaMinutes(distanceKm);
+              tracking.jobs.map((job, index) => {
+                const location = job.coordinates ? ([job.coordinates.latitude, job.coordinates.longitude] as LatLng) : null;
+                const distanceKm = riderPosition && location ? haversineKm(riderPosition, location) : null;
+                const etaMin = distanceKm !== null ? estimateEtaMinutes(distanceKm) : null;
                 return (
                   <button
-                    key={stop.complaint.id}
+                    key={job.id}
                     type="button"
-                    onClick={() => navigate(`/dashboard/complaints/${stop.complaint.id}/view`)}
+                    onClick={() => navigate(`/dashboard/complaints/${job.id}/view`)}
                     className={`flex w-full cursor-pointer items-start gap-3 rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                       index === 0 ? "border-accent/40" : "border-border"
                     }`}
@@ -196,17 +225,17 @@ export default function RiderTrackingPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-text-darker">
-                        #{stop.complaint.id} {stop.complaint.title}
+                        #{job.id} {job.title}
                       </p>
-                      <p className="mt-0.5 truncate text-xs text-text-dark">{stop.complaint.site}</p>
+                      <p className="mt-0.5 truncate text-xs text-text-dark">{job.site}</p>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <StatusBadge
-                          label={index === 0 ? "Next stop" : stop.complaint.status}
-                          tone={index === 0 ? "in-progress" : complaintStatusTone(stop.complaint.status)}
+                          label={index === 0 ? "Next stop" : job.status}
+                          tone={index === 0 ? "in-progress" : complaintStatusTone(job.status)}
                         />
                         <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-text-dark">
                           <Navigation className="h-3 w-3" />
-                          {distanceKm.toFixed(1)} km · ~{etaMin} min
+                          {distanceKm !== null && etaMin !== null ? `${distanceKm.toFixed(1)} km · ~${etaMin} min` : "—"}
                         </span>
                       </div>
                     </div>

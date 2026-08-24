@@ -74,3 +74,47 @@ export async function getRider(req: Request, res: Response) {
     res.status(500).json({ success: false, message: "Failed to fetch rider" });
   }
 }
+
+export async function getRiderStats(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid rider id" });
+      return;
+    }
+
+    const stats = await Rider.getOrderStats(id);
+    if (!stats) {
+      res.status(404).json({ success: false, message: "Rider not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, ...stats });
+  } catch (error) {
+    console.error("Failed to fetch rider stats:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch rider stats" });
+  }
+}
+
+export async function getRiderTracking(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid rider id" });
+      return;
+    }
+
+    const tracking = await Rider.getTracking(id);
+    if (!tracking) {
+      res.status(404).json({ success: false, message: "Rider not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, ...tracking });
+  } catch (error) {
+    console.error("Failed to fetch rider tracking:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch rider tracking" });
+  }
+}
