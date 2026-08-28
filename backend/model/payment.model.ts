@@ -8,10 +8,12 @@ export type InitiatePaymentResult =
   | { outcome: "nothing-due" }
   | { outcome: "ok"; checkoutUrl: string };
 
-// Base app URL Safepay redirects the browser back to after checkout — not
-// used to confirm payment (the webhook is the source of truth for that),
-// just where to send the user once they're done on Safepay's hosted page.
-const APP_URL = process.env.CORS_ORIGIN ?? "http://localhost:5173";
+// Where Safepay redirects the phone's browser after checkout — not used to
+// confirm payment (the webhook is the source of truth for that), just a
+// landing page so the browser doesn't dead-end. The mobile app has no deep
+// link scheme registered to catch this, so it points at a small static page
+// served by this backend rather than the admin dashboard (CORS_ORIGIN).
+const BACKEND_PUBLIC_URL = process.env.BACKEND_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 5000}`;
 
 export class Payment {
   static async initiatePayment(complaintId: number, clientId: string): Promise<InitiatePaymentResult> {
@@ -31,8 +33,8 @@ export class Payment {
     const checkoutUrl = buildSafepayCheckoutUrl({
       token,
       orderId,
-      redirectUrl: `${APP_URL}/payment-complete`,
-      cancelUrl: `${APP_URL}/payment-cancelled`,
+      redirectUrl: `${BACKEND_PUBLIC_URL}/payments/complete`,
+      cancelUrl: `${BACKEND_PUBLIC_URL}/payments/cancelled`,
     });
 
     await PaymentSchema.create({

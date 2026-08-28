@@ -10,4 +10,14 @@ router.post("/:complaintId/checkout", verifyClient, createCheckout);
 // verification (verifySafepayWebhookSignature) rather than a JWT.
 router.post("/webhooks/safepay", safepayWebhook);
 
+// Landing pages Safepay's hosted checkout redirects the phone's browser to —
+// the mobile app has no deep link scheme to catch this, so these just tell
+// the client to switch back. Actual payment confirmation is the webhook above.
+router.get("/complete", (_req, res) => {
+  res.send("<p>Payment received. You can close this tab and return to the Catkin app.</p>");
+});
+router.get("/cancelled", (_req, res) => {
+  res.send("<p>Payment cancelled. You can close this tab and return to the Catkin app.</p>");
+});
+
 export default router;
