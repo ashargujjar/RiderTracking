@@ -87,6 +87,25 @@ export class Complaint {
     return ComplaintSchema.countDocuments({ clientId, status: { $ne: "Resolved" } });
   }
 
+  // The client's TRUE total outstanding balance right now — summed live
+  // across every one of their complaints, not just whichever one happens to
+  // be "active". A single complaint's own totalAmount only folds in the rest
+  // of the client's debt at the moment IT was priced, so it goes stale/wrong
+  // the instant a newer, not-yet-priced complaint becomes the active one.
+  static async getOutstandingBalanceForClient(clientId: string): Promise<number> {
+    const result = await ComplaintSchema.aggregate([
+      {
+        $match: {
+          clientId: new Types.ObjectId(clientId),
+          amountDue: { $gt: 0 },
+          paymentStatus: "Unpaid",
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$amountDue" } } },
+    ]);
+    return result[0]?.total ?? 0;
+  }
+
   static async createComplaint(clientId: string, input: CreateComplaintInput, photos: string[]) {
     const clientExists = await Client.exists({ _id: clientId });
     if (!clientExists) return null;

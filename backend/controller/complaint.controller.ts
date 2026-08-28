@@ -71,8 +71,11 @@ export async function getMyComplaints(req: Request, res: Response) {
 export async function getMyActiveComplaint(req: Request, res: Response) {
   try {
     const clientId = res.locals.clientId as string;
-    const complaint = await Complaint.getActiveComplaintForClient(clientId);
-    res.status(200).json({ success: true, complaint });
+    const [complaint, outstandingBalance] = await Promise.all([
+      Complaint.getActiveComplaintForClient(clientId),
+      Complaint.getOutstandingBalanceForClient(clientId),
+    ]);
+    res.status(200).json({ success: true, complaint, outstandingBalance });
   } catch (error) {
     console.error("Failed to fetch active complaint:", error);
     res.status(500).json({ success: false, message: "Failed to fetch active complaint" });
