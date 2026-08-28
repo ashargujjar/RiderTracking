@@ -48,6 +48,7 @@ export async function getComplaints(
     riderId?: string;
     date?: string;
     clientId?: string;
+    paymentStatus?: PaymentStatus;
   } = {},
 ): Promise<ComplaintsPage> {
   const params = new URLSearchParams({ page: String(page) });
@@ -56,6 +57,7 @@ export async function getComplaints(
   if (options.riderId) params.set("riderId", options.riderId);
   if (options.date) params.set("date", options.date);
   if (options.clientId) params.set("clientId", options.clientId);
+  if (options.paymentStatus) params.set("paymentStatus", options.paymentStatus);
 
   const data = await apiFetch<{
     success: boolean;

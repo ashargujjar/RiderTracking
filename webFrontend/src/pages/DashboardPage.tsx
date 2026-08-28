@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Bike, CheckCircle2, ClipboardList, Users, Wallet } from "lucide-react";
+import { AlertCircle, Bike, CheckCircle2, ClipboardList, Users, Video, Wallet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
@@ -73,6 +73,14 @@ export default function DashboardPage() {
       icon: Wallet,
       tone: "secondary",
       path: "/dashboard/payments",
+    },
+    {
+      key: "guide-videos",
+      title: "Guide Videos",
+      description: "Manage the YouTube demo guides shown in the client app.",
+      icon: Video,
+      tone: "accent",
+      path: "/dashboard/guide-videos",
     },
   ];
 

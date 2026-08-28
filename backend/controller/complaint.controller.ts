@@ -197,8 +197,10 @@ export async function submitMyJobResolution(req: Request, res: Response) {
 
 export async function getAllComplaints(req: Request, res: Response) {
   try {
-    const { page, search, bucket, riderId, date, clientId } = listComplaintsQuerySchema.parse(req.query);
-    const result = await Complaint.getAllComplaints(page, { search, bucket, riderId, date, clientId });
+    const { page, search, bucket, riderId, date, clientId, paymentStatus } = listComplaintsQuerySchema.parse(
+      req.query,
+    );
+    const result = await Complaint.getAllComplaints(page, { search, bucket, riderId, date, clientId, paymentStatus });
     res.status(200).json({ success: true, ...result });
   } catch (error) {
     if (error instanceof ZodError) {

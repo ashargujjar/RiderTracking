@@ -8,3 +8,4 @@ const router = Router();
 router.get("/", verifyAdmin, getStats);
 
 export default router;
+1;

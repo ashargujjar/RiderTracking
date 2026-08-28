@@ -81,6 +81,8 @@ type ListComplaintsOptions = {
   clientId?: string;
   // Calendar day (UTC) the complaint was raised on, "YYYY-MM-DD".
   date?: string;
+  // Billable complaints only (amountDue > 0) at this payment status.
+  paymentStatus?: "Paid" | "Unpaid";
 };
 
 export class Complaint {
@@ -426,6 +428,11 @@ export class Complaint {
       const startOfDay = new Date(`${options.date}T00:00:00.000Z`);
       const startOfNextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
       filter.raisedDate = { $gte: startOfDay, $lt: startOfNextDay };
+    }
+
+    if (options.paymentStatus) {
+      filter.amountDue = { $gt: 0 };
+      filter.paymentStatus = options.paymentStatus;
     }
 
     if (options.search) {

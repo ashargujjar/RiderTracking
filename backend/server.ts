@@ -10,6 +10,7 @@ import adminRoutes from "./routes/admin.routes";
 import clientRoutes from "./routes/client.routes";
 import complaintRoutes from "./routes/complaint.routes";
 import coordinatesRoutes from "./routes/coordinates.routes";
+import guideVideoRoutes from "./routes/guideVideo.routes";
 import riderRoutes from "./routes/rider.routes";
 import statsRoutes from "./routes/stats.routes";
 
@@ -30,6 +31,7 @@ app.use("/admin", adminRoutes);
 app.use("/clients", clientRoutes);
 app.use("/complaints", complaintRoutes);
 app.use("/coordinates", coordinatesRoutes);
+app.use("/guide-videos", guideVideoRoutes);
 app.use("/riders", riderRoutes);
 app.use("/stats", statsRoutes);
 

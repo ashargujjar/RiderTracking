@@ -1,17 +1,32 @@
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
 import { LinkCard } from "../components/LinkCard";
-import { MOCK_COMPLAINTS } from "../data/mockComplaints";
+import { LoadingState } from "../components/LoadingState";
+import { getComplaints } from "../api/complaintsApi";
 
 export default function PaymentManagementPage() {
   const navigate = useNavigate();
+  const [unpaidCount, setUnpaidCount] = useState<number | undefined>(undefined);
+  const [paidCount, setPaidCount] = useState<number | undefined>(undefined);
 
-  const billableComplaints = MOCK_COMPLAINTS.filter((complaint) => complaint.amountDue > 0);
-  const unpaidCount = billableComplaints.filter((complaint) => complaint.paymentStatus === "Unpaid").length;
-  const paidCount = billableComplaints.filter((complaint) => complaint.paymentStatus === "Paid").length;
+  useEffect(() => {
+    Promise.all([
+      getComplaints(1, { paymentStatus: "Unpaid" }),
+      getComplaints(1, { paymentStatus: "Paid" }),
+    ])
+      .then(([unpaid, paid]) => {
+        setUnpaidCount(unpaid.totalCount);
+        setPaidCount(paid.totalCount);
+      })
+      .catch(() => toast.error("Failed to load payment summary"));
+  }, []);
+
+  const isLoading = unpaidCount === undefined || paidCount === undefined;
 
   const LINK_CARDS = [
     {
@@ -21,7 +36,7 @@ export default function PaymentManagementPage() {
       icon: AlertTriangle,
       tone: "warning" as const,
       path: "/dashboard/payments/unpaid",
-      count: unpaidCount,
+      count: unpaidCount ?? 0,
     },
     {
       key: "paid-complaints",
@@ -30,7 +45,7 @@ export default function PaymentManagementPage() {
       icon: CheckCircle2,
       tone: "success" as const,
       path: "/dashboard/payments/paid",
-      count: paidCount,
+      count: paidCount ?? 0,
     },
   ];
 
@@ -41,19 +56,25 @@ export default function PaymentManagementPage() {
       <PageContainer width="hub">
         <p className="text-sm text-gray">Track amounts due and settle payments for complaints.</p>
 
-        <div className="mt-8 flex flex-col gap-4">
-          {LINK_CARDS.map(({ key, title, description, icon, tone, path, count }) => (
-            <LinkCard
-              key={key}
-              title={title}
-              description={description}
-              icon={icon}
-              tone={tone}
-              count={count}
-              onClick={() => navigate(path)}
-            />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="mt-8">
+            <LoadingState />
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col gap-4">
+            {LINK_CARDS.map(({ key, title, description, icon, tone, path, count }) => (
+              <LinkCard
+                key={key}
+                title={title}
+                description={description}
+                icon={icon}
+                tone={tone}
+                count={count}
+                onClick={() => navigate(path)}
+              />
+            ))}
+          </div>
+        )}
       </PageContainer>
     </>
   );

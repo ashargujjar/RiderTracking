@@ -24,6 +24,7 @@ import SearchComplaintPage from "./pages/SearchComplaintPage";
 import ComplaintDetailPage from "./pages/ComplaintDetailPage";
 import PaymentManagementPage from "./pages/PaymentManagementPage";
 import PaymentListPage from "./pages/PaymentListPage";
+import GuideVideosPage from "./pages/GuideVideosPage";
 
 function App() {
   return (
@@ -55,6 +56,7 @@ function App() {
             <Route path="complaints/:status" element={<ComplaintListPage />} />
             <Route path="payments" element={<PaymentManagementPage />} />
             <Route path="payments/:status" element={<PaymentListPage />} />
+            <Route path="guide-videos" element={<GuideVideosPage />} />
           </Route>
         </Route>
       </Routes>

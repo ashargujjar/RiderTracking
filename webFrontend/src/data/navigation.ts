@@ -1,4 +1,4 @@
-import { Bike, ClipboardList, LayoutDashboard, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Bike, ClipboardList, LayoutDashboard, Users, Video, Wallet, type LucideIcon } from "lucide-react";
 
 export type NavSection = {
   key: string;
@@ -14,4 +14,5 @@ export const NAV_SECTIONS: NavSection[] = [
   { key: "riders", label: "Riders", path: "/dashboard/riders", icon: Bike },
   { key: "complaints", label: "Complaints", path: "/dashboard/complaints", icon: ClipboardList },
   { key: "payments", label: "Payments", path: "/dashboard/payments", icon: Wallet },
+  { key: "guide-videos", label: "Guide Videos", path: "/dashboard/guide-videos", icon: Video },
 ];
