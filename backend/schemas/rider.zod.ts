@@ -19,6 +19,13 @@ export const riderLoginSchema = z.object({
 
 export type RiderLoginInput = z.infer<typeof riderLoginSchema>;
 
+export const updateRiderLocationSchema = z.object({
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
+});
+
+export type UpdateRiderLocationInput = z.infer<typeof updateRiderLocationSchema>;
+
 export const listRidersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   search: z.string().trim().min(1).optional(),

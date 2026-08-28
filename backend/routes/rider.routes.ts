@@ -8,6 +8,7 @@ import {
   getRiderStats,
   getRiderTracking,
   login,
+  updateMyLocation,
 } from "../controller/rider.controller";
 import { verifyAdmin } from "../middleware/verifyAdmin";
 import { verifyRider } from "../middleware/verifyRider";
@@ -15,8 +16,9 @@ import { verifyRider } from "../middleware/verifyRider";
 const router = Router();
 
 router.post("/login", login);
-// Registered before "/:id" (admin) so "mine/queue" isn't swallowed by it.
+// Registered before "/:id" (admin) so "mine/queue" and "mine/location" aren't swallowed by it.
 router.get("/mine/queue", verifyRider, getMyQueue);
+router.put("/mine/location", verifyRider, updateMyLocation);
 router.post("/", verifyAdmin, createRider);
 router.get("/", verifyAdmin, getAllRiders);
 router.get("/:id", verifyAdmin, getRider);

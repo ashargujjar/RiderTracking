@@ -8,6 +8,7 @@ import {
   getMyActiveComplaint,
   getMyComplaint,
   getMyComplaints,
+  getMyComplaintTracking,
   submitMyJobResolution,
   updateComplaint,
 } from "../controller/complaint.controller";
@@ -31,6 +32,7 @@ router.post("/", verifyClient, upload.array("photos", MAX_COMPLAINT_PHOTOS), cre
 router.get("/mine", verifyClient, getMyComplaints);
 router.get("/mine/active", verifyClient, getMyActiveComplaint);
 router.get("/mine/:id", verifyClient, getMyComplaint);
+router.get("/mine/:id/tracking", verifyClient, getMyComplaintTracking);
 // Rider-driven job actions — ownership (assignedTo === the calling rider) is
 // enforced in Complaint.advanceRiderJobStage / submitRiderResolution.
 router.patch("/:id/stage", verifyRider, advanceMyJobStage);

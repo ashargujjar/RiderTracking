@@ -90,6 +90,28 @@ export async function getMyComplaint(req: Request, res: Response) {
   }
 }
 
+export async function getMyComplaintTracking(req: Request, res: Response) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ success: false, message: "Invalid complaint id" });
+      return;
+    }
+
+    const clientId = res.locals.clientId as string;
+    const tracking = await Complaint.getTrackingForClient(id, clientId);
+    if (!tracking) {
+      res.status(404).json({ success: false, message: "Complaint not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, ...tracking });
+  } catch (error) {
+    console.error("Failed to fetch complaint tracking:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch complaint tracking" });
+  }
+}
+
 function riderJobActionErrorResponse(res: Response, outcome: "not-found" | "forbidden" | "invalid-transition") {
   if (outcome === "not-found") {
     res.status(404).json({ success: false, message: "Job not found" });

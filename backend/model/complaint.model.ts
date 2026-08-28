@@ -8,6 +8,7 @@ import {
 } from "../schemas/complaint.schema";
 import { Rider } from "../schemas/rider.schema";
 import { RiderAssignment } from "../schemas/riderAssignment.schema";
+import { RiderLocation } from "../schemas/riderLocation.schema";
 import type { CreateComplaintInput, UpdateComplaintInput } from "../schemas/complaint.zod";
 
 export type UpdateComplaintResult =
@@ -129,6 +130,28 @@ export class Complaint {
     const complaint = await Complaint.getComplaintById(id);
     if (!complaint || complaint.clientId !== clientId) return null;
     return complaint;
+  }
+
+  // The assigned rider's live GPS fix for one of the client's own complaints —
+  // powers Frontendui/src/screens/TrackRiderScreen.tsx. Same RiderLocation doc
+  // the rider's background location task writes to and the admin's tracking
+  // page reads from.
+  static async getTrackingForClient(id: number, clientId: string) {
+    const complaint = await ComplaintSchema.findById(id).select("clientId assignedTo").lean();
+    if (!complaint || complaint.clientId.toString() !== clientId) return null;
+    if (!complaint.assignedTo) return { rider: null, location: null };
+
+    const [rider, location] = await Promise.all([
+      Rider.findById(complaint.assignedTo).select("name phone").lean(),
+      RiderLocation.findOne({ riderId: complaint.assignedTo }).lean(),
+    ]);
+
+    return {
+      rider: rider ? { _id: rider._id.toString(), name: rider.name, phone: rider.phone } : null,
+      location: location
+        ? { latitude: location.latitude, longitude: location.longitude, updatedAt: location.updatedAt }
+        : null,
+    };
   }
 
   // Paginated, newest-first history of a client's own complaints — powers the

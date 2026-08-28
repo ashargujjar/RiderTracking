@@ -4,7 +4,12 @@ import { isValidObjectId, mongo } from "mongoose";
 import { ZodError } from "zod";
 
 import { Rider } from "../model/rider.model";
-import { createRiderSchema, listRidersQuerySchema, riderLoginSchema } from "../schemas/rider.zod";
+import {
+  createRiderSchema,
+  listRidersQuerySchema,
+  riderLoginSchema,
+  updateRiderLocationSchema,
+} from "../schemas/rider.zod";
 
 function isDuplicateUsernameError(error: unknown): boolean {
   return (
@@ -74,6 +79,24 @@ export async function getMyQueue(req: Request, res: Response) {
   } catch (error) {
     console.error("Failed to fetch rider queue:", error);
     res.status(500).json({ success: false, message: "Failed to fetch rider queue" });
+  }
+}
+
+export async function updateMyLocation(req: Request, res: Response) {
+  try {
+    const { latitude, longitude } = updateRiderLocationSchema.parse(req.body);
+    const riderId = res.locals.riderId as string;
+    await Rider.updateMyLocation(riderId, latitude, longitude);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Failed to update rider location:", error);
+    res.status(500).json({ success: false, message: "Failed to update rider location" });
   }
 }
 

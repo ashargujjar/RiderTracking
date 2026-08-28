@@ -98,6 +98,17 @@ export class Rider {
       });
   }
 
+  // Upserts this rider's live GPS fix — called repeatedly by the mobile app's
+  // background location task while a job is On The Way/Arrived. Same
+  // RiderLocation doc the admin's tracking page and client tracking read from.
+  static async updateMyLocation(riderId: string, latitude: number, longitude: number) {
+    await RiderLocation.findOneAndUpdate(
+      { riderId },
+      { latitude, longitude },
+      { upsert: true },
+    );
+  }
+
   static async getAllRiders(page: number, search?: string) {
     const skip = (page - 1) * RIDERS_PAGE_SIZE;
     const filter = search ? buildSearchFilter(search) : {};
