@@ -14,6 +14,8 @@ export const listComplaintsQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   bucket: z.enum(["pending", "completed"]).optional(),
   riderId: z.string().trim().min(1).optional(),
+  // Calendar day (UTC) the complaint was raised on, e.g. "2026-08-18".
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date").optional(),
 });
 
 export type ListComplaintsQuery = z.infer<typeof listComplaintsQuerySchema>;

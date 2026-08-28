@@ -7,19 +7,20 @@ import { PageContainer } from "../components/layout/PageContainer";
 import { PageHeader } from "../components/layout/PageHeader";
 import { LinkCard } from "../components/LinkCard";
 import { getStats } from "../api/statsApi";
-import { MOCK_COMPLAINTS } from "../data/mockComplaints";
 
 export default function ComplaintManagementPage() {
   const navigate = useNavigate();
   const [pendingCount, setPendingCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
 
   useEffect(() => {
     getStats()
-      .then((stats) => setPendingCount(stats.pendingComplaints))
-      .catch(() => toast.error("Failed to load pending complaints count"));
+      .then((stats) => {
+        setPendingCount(stats.pendingComplaints);
+        setCompletedCount(stats.completedComplaints);
+      })
+      .catch(() => toast.error("Failed to load complaint counts"));
   }, []);
-
-  const completedCount = MOCK_COMPLAINTS.filter((complaint) => complaint.status === "Resolved").length;
 
   const LINK_CARDS = [
     {

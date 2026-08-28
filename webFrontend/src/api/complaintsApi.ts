@@ -42,12 +42,13 @@ export type ComplaintsPage = {
 
 export async function getComplaints(
   page: number,
-  options: { search?: string; bucket?: ComplaintsBucket; riderId?: string } = {},
+  options: { search?: string; bucket?: ComplaintsBucket; riderId?: string; date?: string } = {},
 ): Promise<ComplaintsPage> {
   const params = new URLSearchParams({ page: String(page) });
   if (options.search) params.set("search", options.search);
   if (options.bucket) params.set("bucket", options.bucket);
   if (options.riderId) params.set("riderId", options.riderId);
+  if (options.date) params.set("date", options.date);
 
   const data = await apiFetch<{
     success: boolean;

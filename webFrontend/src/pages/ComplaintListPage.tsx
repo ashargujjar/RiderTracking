@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ClipboardList, Search } from "lucide-react";
+import { AlertTriangle, ClipboardList, Search, X } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { PageContainer } from "../components/layout/PageContainer";
@@ -36,6 +36,7 @@ export default function ComplaintListPage() {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [riderFilter, setRiderFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("");
   const [sortBy, setSortBy] = useState<SortMode>("none");
 
   const [complaints, setComplaints] = useState<ComplaintListItem[]>([]);
@@ -68,7 +69,12 @@ export default function ComplaintListPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    getComplaints(page, { search, bucket, riderId: riderFilter === "all" ? undefined : riderFilter })
+    getComplaints(page, {
+      search,
+      bucket,
+      riderId: riderFilter === "all" ? undefined : riderFilter,
+      date: dateFilter || undefined,
+    })
       .then((data) => {
         setComplaints(data.complaints);
         setTotalPages(data.totalPages);
@@ -76,7 +82,7 @@ export default function ComplaintListPage() {
       })
       .catch(() => toast.error("Failed to load complaints"))
       .finally(() => setIsLoading(false));
-  }, [page, search, bucket, riderFilter]);
+  }, [page, search, bucket, riderFilter, dateFilter]);
 
   const sortedComplaints = useMemo(() => {
     if (sortBy === "none") return complaints;
@@ -122,6 +128,7 @@ export default function ComplaintListPage() {
           <p className="text-lg font-bold text-text-darker">
             {totalCount} complaint{totalCount === 1 ? "" : "s"}
             {search && ` matching "${search}"`}
+            {dateFilter && ` raised on ${dateFilter}`}
           </p>
           {bucket === "pending" && unpaidCount > 0 && (
             <span className="flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-xs font-bold text-warning">
@@ -159,6 +166,32 @@ export default function ComplaintListPage() {
               </option>
             ))}
           </select>
+
+          <div className="relative">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(event) => {
+                setDateFilter(event.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by raised date"
+              className="h-10 rounded-lg border border-border bg-white px-3 pr-8 text-sm text-text-darker outline-none focus:border-primary"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFilter("");
+                  setPage(1);
+                }}
+                aria-label="Clear date filter"
+                className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-gray hover:bg-background"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
           <select
             value={sortBy}

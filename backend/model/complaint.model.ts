@@ -78,6 +78,8 @@ type ListComplaintsOptions = {
   search?: string;
   bucket?: "pending" | "completed";
   riderId?: string;
+  // Calendar day (UTC) the complaint was raised on, "YYYY-MM-DD".
+  date?: string;
 };
 
 export class Complaint {
@@ -413,6 +415,12 @@ export class Complaint {
       filter.assignedTo = null;
     } else if (options.riderId && isValidObjectId(options.riderId)) {
       filter.assignedTo = options.riderId as FilterQuery<ComplaintDocument>["assignedTo"];
+    }
+
+    if (options.date) {
+      const startOfDay = new Date(`${options.date}T00:00:00.000Z`);
+      const startOfNextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+      filter.raisedDate = { $gte: startOfDay, $lt: startOfNextDay };
     }
 
     if (options.search) {
