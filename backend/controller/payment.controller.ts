@@ -1,0 +1,52 @@
+import type { Request, Response } from "express";
+
+import { Payment } from "../model/payment.model";
+import { verifySafepayWebhookSignature } from "../middleware/safepay";
+
+export async function createCheckout(req: Request, res: Response) {
+  try {
+    const complaintId = Number(req.params.complaintId);
+    if (!Number.isInteger(complaintId)) {
+      res.status(400).json({ success: false, message: "Invalid complaint id" });
+      return;
+    }
+
+    const clientId = res.locals.clientId as string;
+    const result = await Payment.initiatePayment(complaintId, clientId);
+
+    if (result.outcome === "not-found") {
+      res.status(404).json({ success: false, message: "Complaint not found" });
+      return;
+    }
+    if (result.outcome === "nothing-due") {
+      res.status(409).json({ success: false, message: "This complaint has nothing due to pay" });
+      return;
+    }
+
+    res.status(200).json({ success: true, checkoutUrl: result.checkoutUrl });
+  } catch (error) {
+    console.error("Failed to create Safepay checkout:", error);
+    res.status(500).json({ success: false, message: "Failed to create checkout session" });
+  }
+}
+
+export async function safepayWebhook(req: Request, res: Response) {
+  try {
+    const signature = req.headers["x-sfpy-signature"];
+    const data = req.body?.data;
+
+    if (typeof signature !== "string" || !data || !verifySafepayWebhookSignature(data, signature)) {
+      res.status(401).json({ success: false, message: "Invalid webhook signature" });
+      return;
+    }
+
+    await Payment.handleWebhook(data);
+    // Safepay retries delivery until it gets a 200 — always acknowledge once
+    // the signature checks out, even if we ignored the payload (e.g. unknown
+    // tracker, already-settled payment).
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to process Safepay webhook:", error);
+    res.status(500).json({ success: false, message: "Failed to process webhook" });
+  }
+}
