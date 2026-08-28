@@ -87,6 +87,9 @@ export type ComplaintDetail = {
   totalAmount: number;
   amountDue: number;
   paymentStatus: PaymentStatus;
+  // Flips true the first time an admin ever sets amountDue (even to 0) —
+  // distinguishes "priced at zero" from "never priced yet".
+  isPriced: boolean;
   // Sum of amountDue still owed on this client's OTHER unpaid complaints —
   // computed live server-side, not stored on this complaint.
   carriedOverDue: number;

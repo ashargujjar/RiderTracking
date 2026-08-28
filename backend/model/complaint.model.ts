@@ -15,6 +15,8 @@ import type { CreateComplaintInput, UpdateComplaintInput } from "../schemas/comp
 export type UpdateComplaintResult =
   | { outcome: "not-found" }
   | { outcome: "rider-not-found" }
+  | { outcome: "too-many-unpaid"; unpaidCount: number }
+  | { outcome: "unpaid-balance" }
   | { outcome: "ok"; complaint: NonNullable<Awaited<ReturnType<typeof Complaint.getComplaintById>>> };
 
 export type RiderJobActionResult =
@@ -57,6 +59,19 @@ async function getCarriedOverDue(clientId: string, excludeComplaintId: number): 
     { $group: { _id: null, total: { $sum: "$amountDue" } } },
   ]);
   return result[0]?.total ?? 0;
+}
+
+// Count of this client's OTHER complaints that currently represent unresolved
+// debt — amountDue > 0, still Unpaid, and not yet Resolved. Used to cap a
+// client at 2 simultaneously open unpaid charges before a 3rd can be billed.
+async function countOtherUnpaidComplaints(clientId: string, excludeComplaintId: number): Promise<number> {
+  return ComplaintSchema.countDocuments({
+    clientId: new Types.ObjectId(clientId),
+    _id: { $ne: excludeComplaintId },
+    amountDue: { $gt: 0 },
+    paymentStatus: "Unpaid",
+    status: { $ne: "Resolved" },
+  });
 }
 
 type ListComplaintsOptions = {
@@ -258,6 +273,13 @@ export class Complaint {
     const complaint = await ComplaintSchema.findById(id);
     if (!complaint) return { outcome: "not-found" };
 
+    // A brand-new charge (0 doesn't count — that's not creating debt) can't
+    // push a client past 2 other simultaneously open unpaid charges.
+    if (input.amountDue !== undefined && input.amountDue > 0) {
+      const unpaidCount = await countOtherUnpaidComplaints(complaint.clientId.toString(), complaint._id!);
+      if (unpaidCount >= 2) return { outcome: "too-many-unpaid", unpaidCount };
+    }
+
     const previousRiderId = complaint.assignedTo ? complaint.assignedTo.toString() : null;
     // What status this complaint ends up at — starts as whatever the admin explicitly
     // requested (or unchanged), but a fresh rider assignment can still bump it below.
@@ -304,6 +326,9 @@ export class Complaint {
         complaint.paymentStatus = "Unpaid";
       }
       complaint.amountDue = input.amountDue;
+      // Submitting any amountDue — even 0 — counts as pricing it (distinct
+      // from a complaint that's simply never been touched by an admin yet).
+      complaint.isPriced = true;
 
       // Total payable folds in any other unpaid balance this client still owes,
       // so settling "the total" clears their whole outstanding balance, not
@@ -314,6 +339,16 @@ export class Complaint {
 
     if (input.paymentStatus !== undefined) {
       complaint.paymentStatus = input.paymentStatus;
+    }
+
+    // Block closing a priced, still-unpaid complaint. Checked here (using
+    // complaint.isPriced/amountDue/paymentStatus as already updated by the
+    // blocks above) rather than after the status block runs, so a single
+    // PATCH setting both paymentStatus:"Paid" and status:"Resolved" together
+    // still succeeds, and a rejected close never triggers the rider-queue
+    // side effect below.
+    if (nextStatus === "Resolved" && complaint.isPriced && complaint.amountDue > 0 && complaint.paymentStatus !== "Paid") {
+      return { outcome: "unpaid-balance" };
     }
 
     if (nextStatus !== complaint.status) {

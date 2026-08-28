@@ -23,6 +23,7 @@ import { LoadingState } from "../components/LoadingState";
 import { SectionTabNav } from "../components/SectionTabNav";
 import { Spinner } from "../components/Spinner";
 import { StatusBadge } from "../components/StatusBadge";
+import { ApiError } from "../api/client";
 import {
   getComplaintById,
   updateComplaint,
@@ -113,6 +114,8 @@ export default function ComplaintDetailPage() {
   const [paymentStatusInput, setPaymentStatusInput] = useState<PaymentStatus>("Unpaid");
   const [isAdminSaving, setIsAdminSaving] = useState(false);
   const [isAdminSaved, setIsAdminSaved] = useState(false);
+  const [isAmountSaving, setIsAmountSaving] = useState(false);
+  const [isAmountSaved, setIsAmountSaved] = useState(false);
   const [isPaymentSaving, setIsPaymentSaving] = useState(false);
   const [isPaymentSaved, setIsPaymentSaved] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
@@ -145,19 +148,33 @@ export default function ComplaintDetailPage() {
     if (!complaint) return;
     setIsAdminSaving(true);
     try {
-      const parsedAmountDue = Math.max(0, Math.round(Number(amountDueInput) || 0));
       const updated = await updateComplaint(complaint.id, {
         status: statusInput,
         assignedTo: assignedToInput || null,
-        amountDue: parsedAmountDue,
       });
       setComplaint(updated);
       setIsAdminSaved(true);
       setTimeout(() => setIsAdminSaved(false), 1800);
-    } catch {
-      toast.error("Failed to save changes");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Failed to save changes");
     } finally {
       setIsAdminSaving(false);
+    }
+  };
+
+  const handleSaveAmount = async () => {
+    if (!complaint) return;
+    setIsAmountSaving(true);
+    try {
+      const parsedAmountDue = Math.max(0, Math.round(Number(amountDueInput) || 0));
+      const updated = await updateComplaint(complaint.id, { amountDue: parsedAmountDue });
+      setComplaint(updated);
+      setIsAmountSaved(true);
+      setTimeout(() => setIsAmountSaved(false), 1800);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Failed to update amount");
+    } finally {
+      setIsAmountSaving(false);
     }
   };
 
@@ -166,8 +183,8 @@ export default function ComplaintDetailPage() {
     setIsApproving(true);
     try {
       setComplaint(await updateComplaint(complaint.id, { status: "Resolved" }));
-    } catch {
-      toast.error("Failed to approve complaint");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Failed to approve complaint");
     } finally {
       setIsApproving(false);
     }
@@ -224,6 +241,13 @@ export default function ComplaintDetailPage() {
   const isFinalized =
     complaint.status === "Resolved" && (complaint.amountDue === 0 || complaint.paymentStatus === "Paid");
 
+  // Mirrors the server-side close-gate in Complaint.updateComplaint: a
+  // genuinely priced, still-unpaid complaint can't be moved to Resolved.
+  // Reads the last-saved complaint state, not the in-progress form inputs —
+  // that's what the server actually evaluates against.
+  const blocksResolve = complaint.isPriced && complaint.amountDue > 0 && complaint.paymentStatus !== "Paid";
+  const statusOptions = blocksResolve ? STATUS_OPTIONS.filter((status) => status !== "Resolved") : STATUS_OPTIONS;
+
   const parsedAmountDue = Math.max(0, Math.round(Number(amountDueInput) || 0));
   const totalPayable = parsedAmountDue + complaint.carriedOverDue;
 
@@ -270,12 +294,17 @@ export default function ComplaintDetailPage() {
                 <p className="mt-1 text-sm text-text-dark">
                   Review the resolution notes and photos below, then approve to close it.
                 </p>
+                {blocksResolve && (
+                  <p className="mt-1 text-xs font-semibold text-warning">
+                    Outstanding balance must be marked Paid before this can be approved.
+                  </p>
+                )}
               </div>
             </div>
             <button
               type="button"
               onClick={handleApprove}
-              disabled={isApproving}
+              disabled={isApproving || blocksResolve}
               className="flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-secondary px-5 text-sm font-bold text-white shadow-md shadow-secondary/30 transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-75"
             >
               {isApproving ? <Spinner /> : "Approve & Close"}
@@ -359,7 +388,7 @@ export default function ComplaintDetailPage() {
                     label="Timeline Status"
                     type="select"
                     value={statusInput}
-                    options={STATUS_OPTIONS}
+                    options={statusOptions}
                     onChange={(value) => setStatusInput(value as ComplaintStatus)}
                   />
                 )}
@@ -397,12 +426,31 @@ export default function ComplaintDetailPage() {
                 {isFinalized ? (
                   <InfoField label="Amount to be Paid (PKR)" value={complaint.amountDue.toLocaleString()} />
                 ) : (
-                  <FormField
-                    label="Amount to be Paid (PKR)"
-                    type="number"
-                    value={amountDueInput}
-                    onChange={setAmountDueInput}
-                  />
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-text-dark">Amount to be Paid (PKR)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={amountDueInput}
+                        onChange={(event) => setAmountDueInput(event.target.value)}
+                        className="h-11 flex-1 rounded-lg border border-border px-3 text-sm text-text-darker outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveAmount}
+                        disabled={isAmountSaving || parsedAmountDue === complaint.amountDue}
+                        className="flex h-11 min-w-24 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-white shadow-md shadow-primary/30 transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isAmountSaving ? <Spinner /> : "Set Amount"}
+                      </button>
+                    </div>
+                    {isAmountSaved && (
+                      <span className="animate-scale-in flex items-center gap-1.5 text-xs font-semibold text-success">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Amount updated
+                      </span>
+                    )}
+                  </div>
                 )}
                 <InfoField
                   label="Total Amount (PKR)"
@@ -411,12 +459,19 @@ export default function ComplaintDetailPage() {
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-text-dark">Payment Status</label>
-                  {complaint.amountDue === 0 ? (
+                  {!complaint.isPriced ? (
+                    <div className="flex h-11 items-center gap-2 rounded-lg border border-border bg-background px-3">
+                      <StatusBadge label="Not yet priced" tone="neutral" />
+                      <span className="flex items-center gap-1 text-xs text-gray">
+                        Set an amount to bill this complaint
+                      </span>
+                    </div>
+                  ) : complaint.amountDue === 0 ? (
                     <div className="flex h-11 items-center gap-2 rounded-lg border border-border bg-background px-3">
                       <StatusBadge label="No Charge" tone="neutral" />
                       <span className="flex items-center gap-1 text-xs text-gray">
                         <ShieldCheck className="h-3.5 w-3.5" />
-                        No amount due yet
+                        Priced at zero — no amount due
                       </span>
                     </div>
                   ) : complaint.paymentStatus === "Paid" ? (

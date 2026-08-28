@@ -63,6 +63,10 @@ const complaintSchema = new Schema(
     // Remaining balance still owed — equals totalAmount until a partial payment is recorded.
     amountDue: { type: Number, required: true, default: 0, min: 0 },
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, required: true, default: "Unpaid" },
+    // Flips true the first time an admin ever sets amountDue via updateComplaint
+    // (even to 0) — distinguishes "priced at zero" (deliberately free) from
+    // "never priced" (amountDue is just its unset default of 0).
+    isPriced: { type: Boolean, required: true, default: false },
   },
   { timestamps: true },
 );

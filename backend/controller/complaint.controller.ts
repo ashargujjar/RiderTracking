@@ -239,6 +239,20 @@ export async function updateComplaint(req: Request, res: Response) {
       res.status(404).json({ success: false, message: "Rider not found" });
       return;
     }
+    if (result.outcome === "too-many-unpaid") {
+      res.status(409).json({
+        success: false,
+        message: `This client already has ${result.unpaidCount} other unpaid complaints — settle those before adding a new charge.`,
+      });
+      return;
+    }
+    if (result.outcome === "unpaid-balance") {
+      res.status(409).json({
+        success: false,
+        message: "This complaint still has an unpaid balance — mark it Paid before resolving.",
+      });
+      return;
+    }
 
     res.status(200).json({ success: true, complaint: result.complaint });
   } catch (error) {
