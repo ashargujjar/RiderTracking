@@ -49,21 +49,30 @@ export class Payment {
   }
 
   // Called from the Safepay webhook once its signature has already been
-  // verified by the caller. Looks up the Payment record this notification
-  // belongs to via the tracker token we stored when the order was created —
-  // matches on notification.tracker first (documented field), falling back to
-  // the outer data.token in case of a naming difference between API versions.
+  // verified by the caller. Matches Safepay's actual documented event shape
+  // (confirmed against their live docs, not just the SDK's test fixture the
+  // first version of this was based on): the tracker lives directly at
+  // data.tracker (no nested "notification" object), and the event kind is
+  // the sibling "type" field ("payment.succeeded" / "payment.failed"), not a
+  // "state" string on data.
   static async handleWebhook(payload: {
-    token?: string;
-    notification?: { tracker?: string; state?: string };
+    type?: string;
+    data: { tracker?: string };
   }): Promise<{ outcome: "ignored" | "applied" }> {
-    const trackerToken = payload.notification?.tracker ?? payload.token;
+    const trackerToken = payload.data?.tracker;
     if (!trackerToken) return { outcome: "ignored" };
+
+    // Other event kinds (authorization.succeeded, void.succeeded, etc.) are
+    // intermediate lifecycle events, not a final outcome — leave the payment
+    // as "initiated" rather than guessing at success/failure for them.
+    if (payload.type !== "payment.succeeded" && payload.type !== "payment.failed") {
+      return { outcome: "ignored" };
+    }
 
     const payment = await PaymentSchema.findOne({ gatewayOrderId: trackerToken });
     if (!payment || payment.status !== "initiated") return { outcome: "ignored" };
 
-    const isPaid = payload.notification?.state === "PAID";
+    const isPaid = payload.type === "payment.succeeded";
     payment.status = isPaid ? "completed" : "failed";
     payment.gatewayResponse = payload;
     await payment.save();

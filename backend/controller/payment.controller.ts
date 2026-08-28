@@ -34,13 +34,15 @@ export async function safepayWebhook(req: Request, res: Response) {
   try {
     const signature = req.headers["x-sfpy-signature"];
     const data = req.body?.data;
+    const type = req.body?.type;
 
     if (typeof signature !== "string" || !data || !verifySafepayWebhookSignature(data, signature)) {
       res.status(401).json({ success: false, message: "Invalid webhook signature" });
       return;
     }
 
-    await Payment.handleWebhook(data);
+    const result = await Payment.handleWebhook({ type, data });
+    console.log(`Safepay webhook (${type}): ${result.outcome}`);
     // Safepay retries delivery until it gets a 200 — always acknowledge once
     // the signature checks out, even if we ignored the payload (e.g. unknown
     // tracker, already-settled payment).
