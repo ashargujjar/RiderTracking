@@ -9,10 +9,10 @@ import { EmptyState } from "../components/EmptyState";
 import { FormSection } from "../components/FormSection";
 import { LoadingState } from "../components/LoadingState";
 import { SectionTabNav } from "../components/SectionTabNav";
-import { getClientById, type ApiClientDoc } from "../api/clientsApi";
+import { Spinner } from "../components/Spinner";
+import { getClientById, getClientStats, type ApiClientDoc, type ClientComplaintStats } from "../api/clientsApi";
 import { apiClientToValues, getApiClientSummary } from "../lib/clientMapping";
 import { SECTIONS } from "../data/clientFormSections";
-import { getClientComplaintStats } from "../data/mockComplaints";
 
 function InfoField({ label, value, fullWidth }: { label: string; value: string; fullWidth?: boolean }) {
   return (
@@ -28,6 +28,8 @@ export default function ClientViewPage() {
   const { id } = useParams<{ id: string }>();
   const [doc, setDoc] = useState<ApiClientDoc | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<ClientComplaintStats | null>(null);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].key);
 
   useEffect(() => {
@@ -36,6 +38,14 @@ export default function ClientViewPage() {
       .then(setDoc)
       .catch(() => toast.error("Failed to load client"))
       .finally(() => setIsLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    getClientStats(id)
+      .then(setStats)
+      .catch(() => toast.error("Failed to load complaint stats"))
+      .finally(() => setIsStatsLoading(false));
   }, [id]);
 
   if (isLoading) {
@@ -67,11 +77,10 @@ export default function ClientViewPage() {
 
   const summary = getApiClientSummary(doc);
   const values = apiClientToValues(doc);
-  const stats = getClientComplaintStats(doc._id);
   const STAT_TILES = [
-    { key: "total", label: "Total Complaints", value: stats.totalCount, icon: ClipboardList, accent: "text-primary bg-primary/10" },
-    { key: "pending", label: "Pending Complaints", value: stats.pendingCount, icon: History, accent: "text-warning bg-warning/10" },
-    { key: "resolved", label: "Resolved Complaints", value: stats.resolvedCount, icon: CheckCircle2, accent: "text-success bg-success/10" },
+    { key: "total", label: "Total Complaints", value: stats?.totalCount ?? 0, icon: ClipboardList, accent: "text-primary bg-primary/10" },
+    { key: "pending", label: "Pending Complaints", value: stats?.pendingCount ?? 0, icon: History, accent: "text-warning bg-warning/10" },
+    { key: "resolved", label: "Resolved Complaints", value: stats?.resolvedCount ?? 0, icon: CheckCircle2, accent: "text-success bg-success/10" },
   ];
 
   const currentSection = SECTIONS.find((section) => section.key === activeSection) ?? SECTIONS[0];
@@ -117,19 +126,26 @@ export default function ClientViewPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {STAT_TILES.map(({ key, label, value, icon: Icon, accent }) => (
-            <div key={key} className="flex items-center gap-3 rounded-xl border border-border bg-white p-4 shadow-sm">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${accent}`}>
-                <Icon className="h-5 w-5" />
+        {isStatsLoading ? (
+          <div className="mt-6 flex items-center gap-3 rounded-xl border border-border bg-white p-6 text-sm font-semibold text-gray shadow-sm">
+            <Spinner className="h-5 w-5 border-2 border-border border-t-primary" />
+            Loading complaint stats...
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {STAT_TILES.map(({ key, label, value, icon: Icon, accent }) => (
+              <div key={key} className="flex items-center gap-3 rounded-xl border border-border bg-white p-4 shadow-sm">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${accent}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-text-darker">{value}</p>
+                  <p className="text-xs text-gray">{label}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xl font-bold text-text-darker">{value}</p>
-                <p className="text-xs text-gray">{label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-6">
           <SectionTabNav

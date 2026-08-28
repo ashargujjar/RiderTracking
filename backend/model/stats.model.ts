@@ -4,12 +4,13 @@ import { Rider as RiderSchema } from "../schemas/rider.schema";
 
 export class Stats {
   static async getCounts() {
-    const [totalClients, totalRiders, pendingComplaints] = await Promise.all([
+    const [totalClients, totalRiders, pendingComplaints, completedComplaints] = await Promise.all([
       ClientSchema.countDocuments(),
       RiderSchema.countDocuments(),
       ComplaintSchema.countDocuments({ status: { $ne: "Resolved" } }),
+      ComplaintSchema.countDocuments({ status: "Resolved" }),
     ]);
 
-    return { totalClients, totalRiders, pendingComplaints };
+    return { totalClients, totalRiders, pendingComplaints, completedComplaints };
   }
 }

@@ -18,6 +18,7 @@ import type { RiderRecord } from "../data/mockRiders";
 type SortMode = "none" | "unpaid-first" | "paid-first" | "date-newest" | "date-oldest" | "location-asc";
 
 const COLUMNS = [
+  { label: "ID" },
   { label: "Title" },
   { label: "Site" },
   { label: "Assigned Rider" },
@@ -184,6 +185,7 @@ export default function ComplaintListPage() {
                   onClick={() => navigate(`/dashboard/complaints/${complaint.id}/view`)}
                   className="cursor-pointer border-t border-border transition hover:bg-background"
                 >
+                  <td className="px-4 py-3 text-text-dark">#{complaint.id}</td>
                   <td className="px-4 py-3 font-semibold text-text-darker">{complaint.title}</td>
                   <td className="px-4 py-3 text-text-dark">{complaint.site}</td>
                   <td className="px-4 py-3 text-text-dark">{complaint.assignedTo ?? "Unassigned"}</td>

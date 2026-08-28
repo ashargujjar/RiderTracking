@@ -22,7 +22,6 @@ export default function DashboardPage() {
       .finally(() => setIsLoadingStats(false));
   }, []);
 
-  const completedComplaintsCount = MOCK_COMPLAINTS.filter((complaint) => complaint.status === "Resolved").length;
   const unpaidComplaintsCount = MOCK_COMPLAINTS.filter(
     (complaint) => complaint.amountDue > 0 && complaint.paymentStatus === "Unpaid",
   ).length;
@@ -30,7 +29,7 @@ export default function DashboardPage() {
   const STAT_TILES = [
     { key: "clients", label: "Total Clients", value: stats?.totalClients ?? 0, icon: Users, accent: "text-primary bg-primary/10" },
     { key: "riders", label: "Total Riders", value: stats?.totalRiders ?? 0, icon: Bike, accent: "text-secondary bg-secondary/10" },
-    { key: "completedComplaints", label: "Completed Complaints", value: completedComplaintsCount, icon: CheckCircle2, accent: "text-success bg-success/10" },
+    { key: "completedComplaints", label: "Completed Complaints", value: stats?.completedComplaints ?? 0, icon: CheckCircle2, accent: "text-success bg-success/10" },
     { key: "pendingComplaints", label: "Pending Complaints", value: stats?.pendingComplaints ?? 0, icon: AlertCircle, accent: "text-warning bg-warning/10" },
     { key: "unpaidComplaints", label: "Unpaid Complaints", value: unpaidComplaintsCount, icon: Wallet, accent: "text-warning bg-warning/10" },
   ];

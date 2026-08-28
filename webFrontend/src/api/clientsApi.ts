@@ -67,3 +67,18 @@ export async function updateClient(id: string, payload: ClientPayload): Promise<
 export async function deleteClient(id: string): Promise<void> {
   await apiFetch<{ success: boolean }>(`/clients/${id}`, { method: "DELETE" });
 }
+
+export type ClientComplaintStats = {
+  totalCount: number;
+  pendingCount: number;
+  resolvedCount: number;
+};
+
+export async function getClientStats(id: string): Promise<ClientComplaintStats> {
+  const data = await apiFetch<{ success: boolean } & ClientComplaintStats>(`/clients/${id}/stats`);
+  return {
+    totalCount: data.totalCount,
+    pendingCount: data.pendingCount,
+    resolvedCount: data.resolvedCount,
+  };
+}

@@ -1,9 +1,10 @@
 import type { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { isValidObjectId, mongo } from "mongoose";
 import { ZodError } from "zod";
 
 import { Rider } from "../model/rider.model";
-import { createRiderSchema, listRidersQuerySchema } from "../schemas/rider.zod";
+import { createRiderSchema, listRidersQuerySchema, riderLoginSchema } from "../schemas/rider.zod";
 
 function isDuplicateUsernameError(error: unknown): boolean {
   return (
@@ -33,6 +34,46 @@ export async function createRider(req: Request, res: Response) {
     }
     console.error("Failed to create rider:", error);
     res.status(500).json({ success: false, message: "Failed to create rider" });
+  }
+}
+
+export async function login(req: Request, res: Response) {
+  try {
+    const { username, password } = riderLoginSchema.parse(req.body);
+
+    const rider = await Rider.login(username, password);
+    if (!rider) {
+      res.status(401).json({ success: false, message: "Invalid username or password" });
+      return;
+    }
+
+    const token = jwt.sign(
+      { id: rider._id.toString(), role: "rider" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "30d" },
+    );
+
+    res.status(200).json({ success: true, token, rider });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Rider login failed:", error);
+    res.status(500).json({ success: false, message: "Login failed" });
+  }
+}
+
+export async function getMyQueue(req: Request, res: Response) {
+  try {
+    const riderId = res.locals.riderId as string;
+    const queue = await Rider.getMyQueue(riderId);
+    res.status(200).json({ success: true, queue });
+  } catch (error) {
+    console.error("Failed to fetch rider queue:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch rider queue" });
   }
 }
 

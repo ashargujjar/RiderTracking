@@ -18,6 +18,12 @@ export const listComplaintsQuerySchema = z.object({
 
 export type ListComplaintsQuery = z.infer<typeof listComplaintsQuerySchema>;
 
+export const submitResolutionSchema = z.object({
+  notes: z.string().trim().min(1).optional(),
+});
+
+export type SubmitResolutionInput = z.infer<typeof submitResolutionSchema>;
+
 export const updateComplaintSchema = z
   .object({
     status: z.enum(COMPLAINT_STATUSES).optional(),

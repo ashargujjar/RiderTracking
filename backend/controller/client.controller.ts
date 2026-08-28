@@ -110,6 +110,28 @@ export async function getClient(req: Request, res: Response) {
   }
 }
 
+export async function getClientStats(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({ success: false, message: "Invalid client id" });
+      return;
+    }
+
+    const stats = await Client.getComplaintStats(id);
+    if (!stats) {
+      res.status(404).json({ success: false, message: "Client not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, ...stats });
+  } catch (error) {
+    console.error("Failed to fetch client stats:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch client stats" });
+  }
+}
+
 export async function editClient(req: Request, res: Response) {
   try {
     const { id } = req.params;

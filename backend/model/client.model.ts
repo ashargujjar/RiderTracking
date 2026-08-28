@@ -1,6 +1,7 @@
 import { isValidObjectId, type FilterQuery } from "mongoose";
 
 import { Client as ClientSchema, type ClientDocument } from "../schemas/client.schema";
+import { Complaint } from "../schemas/complaint.schema";
 import { WhatsappCredentialsCheck } from "../schemas/whatsappCredentialsCheck.schema";
 import type { CreateClientInput, EditClientInput } from "../schemas/client.zod";
 
@@ -102,6 +103,22 @@ export class Client {
 
     await client.save();
     return client.toObject();
+  }
+
+  // Complaint counts for one client — powers the stat tiles on
+  // webFrontend/src/pages/ClientViewPage.tsx. "pending" matches the same
+  // not-yet-Resolved bucket used everywhere else (see complaint.model.ts).
+  static async getComplaintStats(id: string) {
+    const clientExists = await ClientSchema.exists({ _id: id });
+    if (!clientExists) return null;
+
+    const [totalCount, pendingCount, resolvedCount] = await Promise.all([
+      Complaint.countDocuments({ clientId: id }),
+      Complaint.countDocuments({ clientId: id, status: { $ne: "Resolved" } }),
+      Complaint.countDocuments({ clientId: id, status: "Resolved" }),
+    ]);
+
+    return { totalCount, pendingCount, resolvedCount };
   }
 
   static async deleteClient(id: string) {

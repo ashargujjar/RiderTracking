@@ -35,6 +35,69 @@ export class Rider {
     return safeRider;
   }
 
+  // Passwords are stored in plaintext (matches Client.login) — admin needs to
+  // view/edit a rider's password in webFrontend/src/pages/RiderViewPage.tsx.
+  static async login(username: string, password: string) {
+    const rider = await RiderSchema.findOne({ username });
+    if (!rider) return null;
+
+    if (rider.password !== password) return null;
+
+    return rider.toObject();
+  }
+
+  // FIFO queue of this rider's active (not yet Resolved) jobs, in the order
+  // they were assigned — position 1 is the job they should work next. Reads
+  // RiderAssignment.complaintIds, which updateComplaint() keeps in sync: it's
+  // appended to on assignment and pulled off once a job is Resolved.
+  static async getMyQueue(riderId: string) {
+    const assignment = await RiderAssignment.findOne({ riderId }).lean();
+    const complaintIds = assignment?.complaintIds ?? [];
+    if (!complaintIds.length) return [];
+
+    const complaints = await Complaint.find({ _id: { $in: complaintIds } })
+      .select("title description status raisedDate clientId")
+      .lean();
+    const complaintById = new Map(complaints.map((complaint) => [complaint._id, complaint]));
+
+    const clientIds = [...new Set(complaints.map((complaint) => complaint.clientId.toString()))];
+    const [clients, coordinatesList] = await Promise.all([
+      Client.find({ _id: { $in: clientIds } })
+        .select("client.site client.location client.contactNo")
+        .lean(),
+      Coordinates.find({ clientId: { $in: clientIds } }).lean(),
+    ]);
+    const clientById = new Map(clients.map((client) => [client._id.toString(), client.client]));
+    // The pin the client dropped/confirmed in ConfirmLocationScreen.tsx — used for
+    // turn-by-turn navigation, distinct from the admin-entered site/location text below.
+    const coordinatesByClientId = new Map(
+      coordinatesList.map((coords) => [
+        coords.clientId.toString(),
+        { latitude: coords.latitude, longitude: coords.longitude },
+      ]),
+    );
+
+    return complaintIds
+      .map((complaintId) => complaintById.get(complaintId))
+      .filter((complaint): complaint is NonNullable<typeof complaint> => Boolean(complaint))
+      .map((complaint, index) => {
+        const clientIdStr = complaint.clientId.toString();
+        const client = clientById.get(clientIdStr);
+        return {
+          _id: complaint._id,
+          position: index + 1,
+          title: complaint.title,
+          description: complaint.description,
+          status: complaint.status,
+          raisedDate: complaint.raisedDate,
+          site: client?.site ?? "",
+          location: client?.location ?? "",
+          contactNo: client?.contactNo ?? "",
+          coordinates: coordinatesByClientId.get(clientIdStr) ?? null,
+        };
+      });
+  }
+
   static async getAllRiders(page: number, search?: string) {
     const skip = (page - 1) * RIDERS_PAGE_SIZE;
     const filter = search ? buildSearchFilter(search) : {};

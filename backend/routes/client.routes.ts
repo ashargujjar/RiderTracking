@@ -1,6 +1,14 @@
 import { Router } from "express";
 
-import { createClient, deleteClient, editClient, getAllClients, getClient, login } from "../controller/client.controller";
+import {
+  createClient,
+  deleteClient,
+  editClient,
+  getAllClients,
+  getClient,
+  getClientStats,
+  login,
+} from "../controller/client.controller";
 import { verifyAdmin } from "../middleware/verifyAdmin";
 
 const router = Router();
@@ -9,6 +17,7 @@ router.post("/login", login);
 router.post("/", verifyAdmin, createClient);
 router.get("/", verifyAdmin, getAllClients);
 router.get("/:id", verifyAdmin, getClient);
+router.get("/:id/stats", verifyAdmin, getClientStats);
 router.put("/:id", verifyAdmin, editClient);
 router.delete("/:id", verifyAdmin, deleteClient);
 

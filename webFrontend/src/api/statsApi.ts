@@ -4,6 +4,7 @@ export type Stats = {
   totalClients: number;
   totalRiders: number;
   pendingComplaints: number;
+  completedComplaints: number;
 };
 
 export async function getStats(): Promise<Stats> {
@@ -12,5 +13,6 @@ export async function getStats(): Promise<Stats> {
     totalClients: data.totalClients,
     totalRiders: data.totalRiders,
     pendingComplaints: data.pendingComplaints,
+    completedComplaints: data.completedComplaints,
   };
 }

@@ -1,7 +1,11 @@
 import { isValidObjectId, Types, type FilterQuery } from "mongoose";
 
 import { Client } from "../schemas/client.schema";
-import { Complaint as ComplaintSchema, type ComplaintDocument } from "../schemas/complaint.schema";
+import {
+  Complaint as ComplaintSchema,
+  type ComplaintDocument,
+  type ComplaintStatus,
+} from "../schemas/complaint.schema";
 import { Rider } from "../schemas/rider.schema";
 import { RiderAssignment } from "../schemas/riderAssignment.schema";
 import type { CreateComplaintInput, UpdateComplaintInput } from "../schemas/complaint.zod";
@@ -11,8 +15,25 @@ export type UpdateComplaintResult =
   | { outcome: "rider-not-found" }
   | { outcome: "ok"; complaint: NonNullable<Awaited<ReturnType<typeof Complaint.getComplaintById>>> };
 
+export type RiderJobActionResult =
+  | { outcome: "not-found" }
+  | { outcome: "forbidden" }
+  | { outcome: "invalid-transition" }
+  | { outcome: "ok"; complaint: NonNullable<Awaited<ReturnType<typeof Complaint.getComplaintById>>> };
+
+// Rider-driven progression: tapping "Start Now" moves Assigned -> On The Way,
+// "Mark Arrived" moves On The Way -> Arrived. One step per call — the server
+// (not the rider) decides the next status from whatever it's currently at.
+const RIDER_STAGE_ADVANCE: Partial<Record<ComplaintStatus, ComplaintStatus>> = {
+  Assigned: "On The Way",
+  "On The Way": "Arrived",
+};
+
 // Matches PAGE_SIZE_TABLE in webFrontend/src/data/constants.ts
 const COMPLAINTS_PAGE_SIZE = 8;
+
+// Matches the mobile app's "load more" page size in Frontendui/src/screens/HistoryScreen.tsx
+const CLIENT_COMPLAINTS_PAGE_SIZE = 10;
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -88,6 +109,110 @@ export class Complaint {
         : null,
       carriedOverDue,
     };
+  }
+
+  // Latest non-Resolved complaint for this client, or null if they have none —
+  // powers the "active complaint" card on the mobile dashboard.
+  static async getActiveComplaintForClient(clientId: string) {
+    const complaint = await ComplaintSchema.findOne({ clientId, status: { $ne: "Resolved" } })
+      .sort({ raisedDate: -1 })
+      .select("_id")
+      .lean();
+    if (!complaint) return null;
+
+    return Complaint.getComplaintById(complaint._id!);
+  }
+
+  // Same shape as getComplaintById, but scoped so a client can only ever fetch
+  // their own complaint's timeline (never another client's by guessing an id).
+  static async getComplaintForClient(id: number, clientId: string) {
+    const complaint = await Complaint.getComplaintById(id);
+    if (!complaint || complaint.clientId !== clientId) return null;
+    return complaint;
+  }
+
+  // Paginated, newest-first history of a client's own complaints — powers the
+  // "load more" list on the mobile History screen.
+  static async getComplaintsForClient(clientId: string, page: number) {
+    const skip = (page - 1) * CLIENT_COMPLAINTS_PAGE_SIZE;
+
+    const [complaints, totalCount] = await Promise.all([
+      ComplaintSchema.find({ clientId })
+        .sort({ raisedDate: -1 })
+        .skip(skip)
+        .limit(CLIENT_COMPLAINTS_PAGE_SIZE)
+        .select("title status raisedDate assignedTo")
+        .lean(),
+      ComplaintSchema.countDocuments({ clientId }),
+    ]);
+
+    const riderIds = [
+      ...new Set(
+        complaints.filter((complaint) => complaint.assignedTo).map((complaint) => complaint.assignedTo!.toString()),
+      ),
+    ];
+    const riders = await Rider.find({ _id: { $in: riderIds } }).select("name").lean();
+    const riderNameById = new Map(riders.map((rider) => [rider._id.toString(), rider.name]));
+
+    return {
+      complaints: complaints.map((complaint) => ({
+        _id: complaint._id,
+        title: complaint.title,
+        status: complaint.status,
+        raisedDate: complaint.raisedDate,
+        assignedTo: complaint.assignedTo ? (riderNameById.get(complaint.assignedTo.toString()) ?? null) : null,
+      })),
+      currentPage: page,
+      totalPages: Math.max(1, Math.ceil(totalCount / CLIENT_COMPLAINTS_PAGE_SIZE)),
+      totalCount,
+    };
+  }
+
+  // Advances a rider's own job exactly one stage (Assigned -> On The Way ->
+  // Arrived). Rejects if the complaint isn't assigned to this rider, or if
+  // its current status has no next stage (e.g. already Arrived, or Resolved).
+  static async advanceRiderJobStage(id: number, riderId: string): Promise<RiderJobActionResult> {
+    const complaint = await ComplaintSchema.findById(id);
+    if (!complaint) return { outcome: "not-found" };
+    if (!complaint.assignedTo || complaint.assignedTo.toString() !== riderId) {
+      return { outcome: "forbidden" };
+    }
+
+    const nextStatus = RIDER_STAGE_ADVANCE[complaint.status];
+    if (!nextStatus) return { outcome: "invalid-transition" };
+
+    complaint.status = nextStatus;
+    complaint.timeline.push({ status: nextStatus, at: new Date() });
+    await complaint.save();
+
+    const updated = await Complaint.getComplaintById(id);
+    return { outcome: "ok", complaint: updated! };
+  }
+
+  // Rider marks their job done: attaches resolution notes/photos and moves it
+  // to Pending Approval. Only an admin can close it from there (see
+  // updateComplaint below) — mirrors the flow documented in complaint.schema.ts.
+  static async submitRiderResolution(
+    id: number,
+    riderId: string,
+    input: { notes?: string; photos: string[] },
+  ): Promise<RiderJobActionResult> {
+    const complaint = await ComplaintSchema.findById(id);
+    if (!complaint) return { outcome: "not-found" };
+    if (!complaint.assignedTo || complaint.assignedTo.toString() !== riderId) {
+      return { outcome: "forbidden" };
+    }
+    if (complaint.status !== "Arrived") return { outcome: "invalid-transition" };
+
+    complaint.resolutionNotes = input.notes;
+    complaint.resolutionPhotos = input.photos;
+    complaint.riderResolvedAt = new Date();
+    complaint.status = "Pending Approval";
+    complaint.timeline.push({ status: "Pending Approval", at: new Date() });
+    await complaint.save();
+
+    const updated = await Complaint.getComplaintById(id);
+    return { outcome: "ok", complaint: updated! };
   }
 
   static async updateComplaint(

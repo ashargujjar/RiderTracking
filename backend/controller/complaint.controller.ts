@@ -6,6 +6,7 @@ import { Complaint } from "../model/complaint.model";
 import {
   createComplaintSchema,
   listComplaintsQuerySchema,
+  submitResolutionSchema,
   updateComplaintSchema,
 } from "../schemas/complaint.zod";
 
@@ -35,6 +36,126 @@ export async function createComplaint(req: Request, res: Response) {
     }
     console.error("Failed to create complaint:", error);
     res.status(500).json({ success: false, message: "Failed to create complaint" });
+  }
+}
+
+export async function getMyComplaints(req: Request, res: Response) {
+  try {
+    const { page } = listComplaintsQuerySchema.pick({ page: true }).parse(req.query);
+    const clientId = res.locals.clientId as string;
+    const result = await Complaint.getComplaintsForClient(clientId, page);
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid query", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Failed to fetch complaints:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch complaints" });
+  }
+}
+
+export async function getMyActiveComplaint(req: Request, res: Response) {
+  try {
+    const clientId = res.locals.clientId as string;
+    const complaint = await Complaint.getActiveComplaintForClient(clientId);
+    res.status(200).json({ success: true, complaint });
+  } catch (error) {
+    console.error("Failed to fetch active complaint:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch active complaint" });
+  }
+}
+
+export async function getMyComplaint(req: Request, res: Response) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ success: false, message: "Invalid complaint id" });
+      return;
+    }
+
+    const clientId = res.locals.clientId as string;
+    const complaint = await Complaint.getComplaintForClient(id, clientId);
+    if (!complaint) {
+      res.status(404).json({ success: false, message: "Complaint not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, complaint });
+  } catch (error) {
+    console.error("Failed to fetch complaint:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch complaint" });
+  }
+}
+
+function riderJobActionErrorResponse(res: Response, outcome: "not-found" | "forbidden" | "invalid-transition") {
+  if (outcome === "not-found") {
+    res.status(404).json({ success: false, message: "Job not found" });
+    return;
+  }
+  if (outcome === "forbidden") {
+    res.status(403).json({ success: false, message: "This job isn't assigned to you" });
+    return;
+  }
+  res.status(409).json({ success: false, message: "Job can't be advanced from its current status" });
+}
+
+export async function advanceMyJobStage(req: Request, res: Response) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ success: false, message: "Invalid complaint id" });
+      return;
+    }
+
+    const riderId = res.locals.riderId as string;
+    const result = await Complaint.advanceRiderJobStage(id, riderId);
+    if (result.outcome !== "ok") {
+      riderJobActionErrorResponse(res, result.outcome);
+      return;
+    }
+
+    res.status(200).json({ success: true, complaint: result.complaint });
+  } catch (error) {
+    console.error("Failed to advance job stage:", error);
+    res.status(500).json({ success: false, message: "Failed to advance job stage" });
+  }
+}
+
+export async function submitMyJobResolution(req: Request, res: Response) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ success: false, message: "Invalid complaint id" });
+      return;
+    }
+
+    const { notes } = submitResolutionSchema.parse(req.body);
+    const riderId = res.locals.riderId as string;
+
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const photos = await Promise.all(
+      files.map((file) => uploadBufferToCloudinary(file.buffer, "resolutions")),
+    );
+
+    const result = await Complaint.submitRiderResolution(id, riderId, { notes, photos });
+    if (result.outcome !== "ok") {
+      riderJobActionErrorResponse(res, result.outcome);
+      return;
+    }
+
+    res.status(200).json({ success: true, complaint: result.complaint });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Failed to submit job resolution:", error);
+    res.status(500).json({ success: false, message: "Failed to submit job resolution" });
   }
 }
 
