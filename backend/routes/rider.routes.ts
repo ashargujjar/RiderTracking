@@ -10,12 +10,13 @@ import {
   login,
   updateMyLocation,
 } from "../controller/rider.controller";
+import { loginRateLimit } from "../middleware/loginRateLimit";
 import { verifyAdmin } from "../middleware/verifyAdmin";
 import { verifyRider } from "../middleware/verifyRider";
 
 const router = Router();
 
-router.post("/login", login);
+router.post("/login", loginRateLimit, login);
 // Registered before "/:id" (admin) so "mine/queue" and "mine/location" aren't swallowed by it.
 router.get("/mine/queue", verifyRider, getMyQueue);
 router.put("/mine/location", verifyRider, updateMyLocation);
