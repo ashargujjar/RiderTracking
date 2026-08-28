@@ -22,10 +22,9 @@ function getEnvironment(): SafepayEnvironment {
   return process.env.SAFEPAY_ENVIRONMENT === "production" ? "production" : "sandbox";
 }
 
-// Amount is charged in the smallest currency subunit (paisas for PKR), matching
-// the SDK's documented example payloads. Verify the amount that lands in the
-// Safepay sandbox dashboard matches what you expect before going live — if it
-// doesn't, this is the one place to adjust.
+// Amount is charged in whole rupees, NOT paisas — confirmed by a live test
+// transaction (a Rs. 1,500 bill was charged as Rs. 150,000 when this sent
+// amountInRupees * 100, so Safepay's PKR amount field wants the plain value).
 export async function createSafepayOrder(input: {
   amountInRupees: number;
   currency: "PKR";
@@ -37,7 +36,7 @@ export async function createSafepayOrder(input: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      amount: Math.round(input.amountInRupees * 100),
+      amount: Math.round(input.amountInRupees),
       client: process.env.SAFEPAY_PUBLIC_KEY,
       currency: input.currency,
       environment,
