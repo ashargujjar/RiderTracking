@@ -52,6 +52,10 @@ export class Client {
     return client.toObject();
   }
 
+  static async updatePushToken(id: string, token: string) {
+    await ClientSchema.updateOne({ _id: id }, { $set: { expoPushToken: token } });
+  }
+
   static async getAllClients(page: number, search?: string) {
     const skip = (page - 1) * CLIENTS_PAGE_SIZE;
     const filter = search ? buildSearchFilter(search) : {};

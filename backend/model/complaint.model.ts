@@ -6,6 +6,7 @@ import {
   type ComplaintDocument,
   type ComplaintStatus,
 } from "../schemas/complaint.schema";
+import { sendPushNotification } from "../middleware/pushNotifications";
 import { Rider } from "../schemas/rider.schema";
 import { RiderAssignment } from "../schemas/riderAssignment.schema";
 import { RiderLocation } from "../schemas/riderLocation.schema";
@@ -207,6 +208,17 @@ export class Complaint {
     complaint.status = nextStatus;
     complaint.timeline.push({ status: nextStatus, at: new Date() });
     await complaint.save();
+
+    // Only fires on Assigned -> On The Way (the only transition that lands on
+    // this status) — lets the client know their rider actually set off.
+    if (nextStatus === "On The Way") {
+      const client = await Client.findById(complaint.clientId).select("expoPushToken").lean();
+      await sendPushNotification(client?.expoPushToken, {
+        title: "Your rider is on the way!",
+        body: "Track your rider's live location now.",
+        data: { complaintId: complaint._id, type: "rider-on-the-way" },
+      });
+    }
 
     const updated = await Complaint.getComplaintById(id);
     return { outcome: "ok", complaint: updated! };

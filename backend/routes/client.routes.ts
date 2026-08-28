@@ -8,12 +8,15 @@ import {
   getClient,
   getClientStats,
   login,
+  updateMyPushToken,
 } from "../controller/client.controller";
 import { verifyAdmin } from "../middleware/verifyAdmin";
+import { verifyClient } from "../middleware/verifyClient";
 
 const router = Router();
 
 router.post("/login", login);
+router.put("/me/push-token", verifyClient, updateMyPushToken);
 router.post("/", verifyAdmin, createClient);
 router.get("/", verifyAdmin, getAllClients);
 router.get("/:id", verifyAdmin, getClient);

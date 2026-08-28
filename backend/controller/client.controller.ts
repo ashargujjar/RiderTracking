@@ -9,6 +9,7 @@ import {
   createClientSchema,
   editClientSchema,
   listClientsQuerySchema,
+  updateClientPushTokenSchema,
 } from "../schemas/client.zod";
 
 function isDuplicateUsernameError(error: unknown): boolean {
@@ -68,6 +69,24 @@ export async function login(req: Request, res: Response) {
     }
     console.error("Client login failed:", error);
     res.status(500).json({ success: false, message: "Login failed" });
+  }
+}
+
+export async function updateMyPushToken(req: Request, res: Response) {
+  try {
+    const { token } = updateClientPushTokenSchema.parse(req.body);
+    const clientId = res.locals.clientId as string;
+    await Client.updatePushToken(clientId, token);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid input", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Failed to update push token:", error);
+    res.status(500).json({ success: false, message: "Failed to update push token" });
   }
 }
 

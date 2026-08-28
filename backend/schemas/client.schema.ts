@@ -105,6 +105,10 @@ const clientSchema = new Schema(
     structure: { type: structureInfoSchema, default: {} },
     qc: { type: qcCommissioningSchema, default: {} },
     remarks: { type: concludingRemarksSchema, default: {} },
+    // Expo push token for this client's mobile app session — set via
+    // PUT /clients/me/push-token once they grant notification permission.
+    // Used to notify them when their rider starts heading their way.
+    expoPushToken: { type: String, trim: true },
   },
   { timestamps: true }
 );

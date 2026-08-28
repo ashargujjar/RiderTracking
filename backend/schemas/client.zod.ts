@@ -114,3 +114,9 @@ export const clientLoginSchema = z.object({
 });
 
 export type ClientLoginInput = z.infer<typeof clientLoginSchema>;
+
+export const updateClientPushTokenSchema = z.object({
+  token: z.string().trim().min(1, "Push token is required"),
+});
+
+export type UpdateClientPushTokenInput = z.infer<typeof updateClientPushTokenSchema>;
