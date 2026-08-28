@@ -81,6 +81,12 @@ type ListComplaintsOptions = {
 };
 
 export class Complaint {
+  // A client can't have more than 2 complaints open (not yet Resolved) at
+  // once — used to cap raising a new one until an earlier one is closed.
+  static async countActiveComplaints(clientId: string): Promise<number> {
+    return ComplaintSchema.countDocuments({ clientId, status: { $ne: "Resolved" } });
+  }
+
   static async createComplaint(clientId: string, input: CreateComplaintInput, photos: string[]) {
     const clientExists = await Client.exists({ _id: clientId });
     if (!clientExists) return null;

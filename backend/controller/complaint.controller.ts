@@ -15,6 +15,17 @@ export async function createComplaint(req: Request, res: Response) {
     const input = createComplaintSchema.parse(req.body);
     const clientId = res.locals.clientId as string;
 
+    // Checked before uploading any photos, so a request that's going to be
+    // rejected doesn't waste a Cloudinary upload first.
+    const activeCount = await Complaint.countActiveComplaints(clientId);
+    if (activeCount >= 2) {
+      res.status(409).json({
+        success: false,
+        message: "You already have 2 active complaints — resolve one before raising another.",
+      });
+      return;
+    }
+
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     const photos = await Promise.all(
       files.map((file) => uploadBufferToCloudinary(file.buffer, "complaints")),
