@@ -6,7 +6,10 @@ import { Complaint } from "./complaint.model";
 export type InitiatePaymentResult =
   | { outcome: "not-found" }
   | { outcome: "nothing-due" }
+  | { outcome: "already-pending" }
   | { outcome: "ok"; checkoutUrl: string };
+
+export type CancelPendingPaymentResult = { outcome: "not-found" } | { outcome: "ok" };
 
 // Where Safepay redirects the phone's browser after checkout — not used to
 // confirm payment (the webhook is the source of truth for that), just a
@@ -22,6 +25,12 @@ export class Payment {
     if (!complaint.isPriced || complaint.totalAmount <= 0 || complaint.paymentStatus === "Paid") {
       return { outcome: "nothing-due" };
     }
+
+    // Refuse a second checkout while one is already awaiting webhook
+    // confirmation — each tap otherwise created a brand-new Safepay order,
+    // meaning a real risk of being charged more than once for the same bill.
+    const pending = await PaymentSchema.exists({ complaintId, status: "initiated" });
+    if (pending) return { outcome: "already-pending" };
 
     const orderId = `catkin-${complaintId}-${Date.now()}`;
     const { token } = await createSafepayOrder({
@@ -46,6 +55,21 @@ export class Payment {
     });
 
     return { outcome: "ok", checkoutUrl };
+  }
+
+  // Lets the client back out of a stuck/abandoned attempt (e.g. they closed
+  // the browser without finishing, or the card was declined without us
+  // hearing a webhook for it) so they aren't locked out of paying forever.
+  static async cancelPendingPayment(complaintId: number, clientId: string): Promise<CancelPendingPaymentResult> {
+    const complaint = await Complaint.getComplaintForClient(complaintId, clientId);
+    if (!complaint) return { outcome: "not-found" };
+
+    await PaymentSchema.updateMany(
+      { complaintId, status: "initiated" },
+      { $set: { status: "cancelled" } },
+    );
+
+    return { outcome: "ok" };
   }
 
   // Called from the Safepay webhook once its signature has already been

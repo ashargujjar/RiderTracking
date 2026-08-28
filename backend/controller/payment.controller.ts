@@ -22,11 +22,42 @@ export async function createCheckout(req: Request, res: Response) {
       res.status(409).json({ success: false, message: "This complaint has nothing due to pay" });
       return;
     }
+    if (result.outcome === "already-pending") {
+      res.status(409).json({
+        success: false,
+        message: "A payment for this complaint is already in progress",
+        outcome: "already-pending",
+      });
+      return;
+    }
 
     res.status(200).json({ success: true, checkoutUrl: result.checkoutUrl });
   } catch (error) {
     console.error("Failed to create Safepay checkout:", error);
     res.status(500).json({ success: false, message: "Failed to create checkout session" });
+  }
+}
+
+export async function cancelCheckout(req: Request, res: Response) {
+  try {
+    const complaintId = Number(req.params.complaintId);
+    if (!Number.isInteger(complaintId)) {
+      res.status(400).json({ success: false, message: "Invalid complaint id" });
+      return;
+    }
+
+    const clientId = res.locals.clientId as string;
+    const result = await Payment.cancelPendingPayment(complaintId, clientId);
+
+    if (result.outcome === "not-found") {
+      res.status(404).json({ success: false, message: "Complaint not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to cancel Safepay checkout:", error);
+    res.status(500).json({ success: false, message: "Failed to cancel checkout" });
   }
 }
 
