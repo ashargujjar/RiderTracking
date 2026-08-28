@@ -68,6 +68,24 @@ export async function getMyComplaints(req: Request, res: Response) {
   }
 }
 
+export async function getMyPaymentHistory(req: Request, res: Response) {
+  try {
+    const { page } = listComplaintsQuerySchema.pick({ page: true }).parse(req.query);
+    const clientId = res.locals.clientId as string;
+    const result = await Complaint.getPaymentHistoryForClient(clientId, page);
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid query", errors: error.flatten().fieldErrors });
+      return;
+    }
+    console.error("Failed to fetch payment history:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch payment history" });
+  }
+}
+
 export async function getMyActiveComplaint(req: Request, res: Response) {
   try {
     const clientId = res.locals.clientId as string;

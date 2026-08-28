@@ -9,6 +9,7 @@ import {
   getMyComplaint,
   getMyComplaints,
   getMyComplaintTracking,
+  getMyPaymentHistory,
   submitMyJobResolution,
   updateComplaint,
 } from "../controller/complaint.controller";
@@ -28,9 +29,11 @@ const MAX_RESOLUTION_PHOTOS = 5;
 // verifyClient runs first so req.body/req.files are all client-authored before
 // the controller reads the authenticated clientId back out of res.locals.
 router.post("/", verifyClient, upload.array("photos", MAX_COMPLAINT_PHOTOS), createComplaint);
-// Registered before "/:id" (admin) so "mine", "mine/active" and "mine/:id" aren't swallowed by it.
+// Registered before "/:id" (admin) so "mine", "mine/active", "mine/payments"
+// and "mine/:id" aren't swallowed by it.
 router.get("/mine", verifyClient, getMyComplaints);
 router.get("/mine/active", verifyClient, getMyActiveComplaint);
+router.get("/mine/payments", verifyClient, getMyPaymentHistory);
 router.get("/mine/:id", verifyClient, getMyComplaint);
 router.get("/mine/:id/tracking", verifyClient, getMyComplaintTracking);
 // Rider-driven job actions — ownership (assignedTo === the calling rider) is

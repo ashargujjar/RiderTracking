@@ -237,6 +237,37 @@ export class Complaint {
     };
   }
 
+  // Billed complaints only (amountDue > 0) — mirrors the admin web's payment
+  // list filter. amountDue holds the last-billed amount even after the
+  // complaint is marked Paid, so this doubles as a payment history record.
+  static async getPaymentHistoryForClient(clientId: string, page: number) {
+    const skip = (page - 1) * CLIENT_COMPLAINTS_PAGE_SIZE;
+    const filter = { clientId, amountDue: { $gt: 0 } };
+
+    const [complaints, totalCount] = await Promise.all([
+      ComplaintSchema.find(filter)
+        .sort({ raisedDate: -1 })
+        .skip(skip)
+        .limit(CLIENT_COMPLAINTS_PAGE_SIZE)
+        .select("title raisedDate amountDue paymentStatus")
+        .lean(),
+      ComplaintSchema.countDocuments(filter),
+    ]);
+
+    return {
+      payments: complaints.map((complaint) => ({
+        _id: complaint._id,
+        title: complaint.title,
+        raisedDate: complaint.raisedDate,
+        amount: complaint.amountDue,
+        paymentStatus: complaint.paymentStatus,
+      })),
+      currentPage: page,
+      totalPages: Math.max(1, Math.ceil(totalCount / CLIENT_COMPLAINTS_PAGE_SIZE)),
+      totalCount,
+    };
+  }
+
   // Advances a rider's own job exactly one stage (Assigned -> On The Way ->
   // Arrived). Rejects if the complaint isn't assigned to this rider, or if
   // its current status has no next stage (e.g. already Arrived, or Resolved).
