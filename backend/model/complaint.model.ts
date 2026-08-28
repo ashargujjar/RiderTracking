@@ -78,6 +78,7 @@ type ListComplaintsOptions = {
   search?: string;
   bucket?: "pending" | "completed";
   riderId?: string;
+  clientId?: string;
   // Calendar day (UTC) the complaint was raised on, "YYYY-MM-DD".
   date?: string;
 };
@@ -415,6 +416,10 @@ export class Complaint {
       filter.assignedTo = null;
     } else if (options.riderId && isValidObjectId(options.riderId)) {
       filter.assignedTo = options.riderId as FilterQuery<ComplaintDocument>["assignedTo"];
+    }
+
+    if (options.clientId && isValidObjectId(options.clientId)) {
+      filter.clientId = options.clientId as FilterQuery<ComplaintDocument>["clientId"];
     }
 
     if (options.date) {
