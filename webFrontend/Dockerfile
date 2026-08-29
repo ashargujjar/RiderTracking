@@ -6,6 +6,10 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# Vite inlines import.meta.env.VITE_* into the bundle at build time, not
+# read at runtime — must be passed as a build arg, not a container env var.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # ---- Runtime stage ----
