@@ -1,0 +1,45 @@
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    # No host port published — only the backend (on the same Docker network)
+    # ever talks to Mongo. Keeps 27017 off the public internet entirely.
+
+  backend:
+    build:
+      context: ./backend
+      # No `target:` here on purpose — the Dockerfile's default (last) stage
+      # is the production build, unlike docker-compose.yml's dev target.
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/${MONGO_DB_NAME:-catkin}
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./webFrontend
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+  caddy_data:
+  caddy_config:

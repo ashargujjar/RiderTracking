@@ -1,0 +1,11 @@
+# Replace both domains below with your real ones, pointed at the EC2
+# instance's IP via DNS A records, before starting this. Caddy automatically
+# provisions and renews free HTTPS certificates (Let's Encrypt) for each.
+
+api.yourdomain.com {
+	reverse_proxy backend:5000
+}
+
+app.yourdomain.com {
+	reverse_proxy frontend:80
+}
