@@ -73,7 +73,7 @@ export async function safepayWebhook(req: Request, res: Response) {
     }
 
     const result = await Payment.handleWebhook({ type, data });
-    console.log(`Safepay webhook (${type}): ${result.outcome}`);
+    console.log(`Safepay webhook [${result.version}] (${type}): ${result.outcome}`);
     // Safepay retries delivery until it gets a 200 — always acknowledge once
     // the signature checks out, even if we ignored the payload (e.g. unknown
     // tracker, already-settled payment).
