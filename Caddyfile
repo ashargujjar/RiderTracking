@@ -1,11 +1,12 @@
-# Replace both domains below with your real ones, pointed at the EC2
-# instance's IP via DNS A records, before starting this. Caddy automatically
-# provisions and renews free HTTPS certificates (Let's Encrypt) for each.
+# Replace both subdomains below with the two you registered on DuckDNS
+# (duckdns.org), each pointed at your Elastic IP. Caddy automatically
+# provisions and renews free, trusted HTTPS certificates (Let's Encrypt) for
+# each — this works for a DuckDNS subdomain exactly like a real domain.
 
-api.yourdomain.com {
+catkin-api.duckdns.org {
 	reverse_proxy backend:5000
 }
 
-app.yourdomain.com {
+catkin-app.duckdns.org {
 	reverse_proxy frontend:80
 }

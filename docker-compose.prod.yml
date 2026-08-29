@@ -1,6 +1,9 @@
 services:
   mongo:
     image: mongo:7
+    # Mongo's default cache sizing targets 50% of (host RAM - 1GB), which
+    # breaks down on a 1GB free-tier box — pin it low explicitly instead.
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
