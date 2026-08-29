@@ -13,8 +13,7 @@ services:
   backend:
     build:
       context: ./backend
-      # No `target:` here on purpose — the Dockerfile's default (last) stage
-      # is the production build, unlike docker-compose.yml's dev target.
+      target: production
     env_file:
       - ./backend/.env
     environment:
@@ -26,6 +25,7 @@ services:
   frontend:
     build:
       context: ./webFrontend
+      target: production
     restart: unless-stopped
 
   caddy:
