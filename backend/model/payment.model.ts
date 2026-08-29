@@ -99,39 +99,42 @@ export class Payment {
   }
 
   // Called from the Safepay webhook once its signature has already been
-  // verified by the caller. Safepay's account settings expose two event
-  // schema versions side by side (confirmed in the dashboard): v2.0.0 —
-  // { type: "payment.succeeded"/"payment.failed", data: { tracker, ... } } —
-  // and the legacy v1.0.0 shape, which has no "type" field at all and
-  // signals success via data.state === "PAID" instead. Only v2.0.0 events
-  // are actually subscribed for real traffic, but we still tag which shape
-  // arrived so the logs make it obvious which version triggered any given
-  // call — useful since the two behave differently on Safepay's side.
+  // verified by the caller. Safepay's account has two event schema versions
+  // live side by side (confirmed by capturing a real delivery of each):
+  //   v2.0.0 — { type: "payment.succeeded"/"payment.failed", data: { tracker, ... } }
+  //   v1.0.0 — { data: { type: "payment:created", notification: { tracker, state: "PAID", ... } } }
+  // Note the v1 shape nests everything one level deeper than v2 — its "type"
+  // and the actual tracker/state live inside data, not at the top level.
+  // Only v2.0.0 is actually subscribed for real traffic, but both are wired
+  // up since the v1 test event does pass signature verification for real.
   static async handleWebhook(payload: {
     type?: string;
-    data: { tracker?: string; state?: string };
+    data: {
+      tracker?: string;
+      type?: string;
+      notification?: { tracker?: string; state?: string };
+    };
   }): Promise<{ outcome: "ignored" | "applied"; version: "v1" | "v2" | "unknown" }> {
-    const trackerToken = payload.data?.tracker;
-    if (!trackerToken) return { outcome: "ignored", version: "unknown" };
-
     let version: "v1" | "v2" | "unknown";
     let isPaid: boolean;
+    let trackerToken: string | undefined;
 
     if (payload.type === "payment.succeeded" || payload.type === "payment.failed") {
       version = "v2";
       isPaid = payload.type === "payment.succeeded";
-    } else if (!payload.type && payload.data?.state === "PAID") {
-      // Legacy v1.0.0 shape — not currently subscribed for real events, but
-      // the dashboard's own "payment:created" test button sends this shape
-      // and it does pass signature verification, so handle it for real too.
+      trackerToken = payload.data?.tracker;
+    } else if (payload.data?.type === "payment:created") {
       version = "v1";
-      isPaid = true;
+      isPaid = payload.data.notification?.state === "PAID";
+      trackerToken = payload.data.notification?.tracker;
     } else {
-      // Other event kinds (authorization.succeeded, void.succeeded, an
-      // unrecognized v1 state, etc.) are intermediate/unhandled — leave the
-      // payment as "initiated" rather than guessing at success/failure.
+      // Other event kinds (authorization.succeeded, void.succeeded, refund
+      // events, an unrecognized v1 type, etc.) are intermediate/unhandled —
+      // leave the payment as "initiated" rather than guessing.
       return { outcome: "ignored", version: "unknown" };
     }
+
+    if (!trackerToken) return { outcome: "ignored", version };
 
     const payment = await PaymentSchema.findOne({
       gatewayOrderId: trackerToken,
