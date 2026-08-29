@@ -74,6 +74,12 @@ export async function safepayWebhook(req: Request, res: Response) {
 
     const result = await Payment.handleWebhook({ type, data });
     console.log(`Safepay webhook [${result.version}] (${type}): ${result.outcome}`);
+    // TEMP: full raw body dump for diagnosing the v1.0.0 shape mismatch —
+    // safe to log since we only reach this line after signature verification
+    // already passed. Remove once the v1 shape is confirmed and handled.
+    if (result.version === "unknown") {
+      console.log("Safepay webhook raw body:", JSON.stringify(req.body));
+    }
     // Safepay retries delivery until it gets a 200 — always acknowledge once
     // the signature checks out, even if we ignored the payload (e.g. unknown
     // tracker, already-settled payment).
