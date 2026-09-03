@@ -11,6 +11,7 @@ import { Rider } from "../schemas/rider.schema";
 import { RiderAssignment } from "../schemas/riderAssignment.schema";
 import { RiderLocation } from "../schemas/riderLocation.schema";
 import type { CreateComplaintInput, UpdateComplaintInput } from "../schemas/complaint.zod";
+import { getIO } from "../utils/socket";
 
 export type UpdateComplaintResult =
   | { outcome: "not-found" }
@@ -195,7 +196,12 @@ export class Complaint {
     return {
       rider: rider ? { _id: rider._id.toString(), name: rider.name, phone: rider.phone } : null,
       location: location
-        ? { latitude: location.latitude, longitude: location.longitude, updatedAt: location.updatedAt }
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            heading: location.heading ?? null,
+            updatedAt: location.updatedAt,
+          }
         : null,
     };
   }
@@ -345,6 +351,9 @@ export class Complaint {
     // What status this complaint ends up at — starts as whatever the admin explicitly
     // requested (or unchanged), but a fresh rider assignment can still bump it below.
     let nextStatus = input.status ?? complaint.status;
+    // Set below when this update actually hands the job to a (new) rider, so
+    // that rider's app can be notified once the save succeeds.
+    let newlyAssignedRiderId: string | null = null;
 
     if (input.assignedTo !== undefined) {
       const newRiderId = input.assignedTo;
@@ -377,6 +386,10 @@ export class Complaint {
         // unless the admin is explicitly setting some other status right now.
         if (newRiderId && nextStatus === "Pending") {
           nextStatus = "Assigned";
+        }
+
+        if (newRiderId) {
+          newlyAssignedRiderId = newRiderId;
         }
       }
     }
@@ -433,6 +446,11 @@ export class Complaint {
     await complaint.save();
 
     const updated = await Complaint.getComplaintById(id);
+
+    if (newlyAssignedRiderId) {
+      getIO().to(newlyAssignedRiderId).emit("complaint:assigned", updated);
+    }
+
     return { outcome: "ok", complaint: updated! };
   }
 

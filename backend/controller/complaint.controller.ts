@@ -9,6 +9,7 @@ import {
   submitResolutionSchema,
   updateComplaintSchema,
 } from "../schemas/complaint.zod";
+import { getIO } from "../utils/socket";
 
 export async function createComplaint(req: Request, res: Response) {
   try {
@@ -36,6 +37,8 @@ export async function createComplaint(req: Request, res: Response) {
       res.status(404).json({ success: false, message: "Client not found" });
       return;
     }
+
+    getIO().emit("complaint:new", complaint);
 
     res.status(201).json({ success: true, complaint });
   } catch (error) {

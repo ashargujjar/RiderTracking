@@ -12,6 +12,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { TableHead, TableShell } from "../components/TableShell";
 import { getComplaints, type ComplaintListItem, type ComplaintsBucket } from "../api/complaintsApi";
 import { getRiders } from "../api/ridersApi";
+import { getSocket } from "../lib/socket";
 import { complaintStatusTone, paymentStatusTone } from "../data/statusStyles";
 import type { RiderRecord } from "../data/mockRiders";
 
@@ -43,6 +44,7 @@ export default function ComplaintListPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Only the first page of riders is fetched for this filter dropdown — fine
   // while rider counts are small, but it'll silently miss riders once there
@@ -67,6 +69,19 @@ export default function ComplaintListPage() {
     });
   }, []);
 
+  // New complaints always start in the pending bucket — refetch this page
+  // the moment one arrives so it shows up without a manual refresh.
+  useEffect(() => {
+    if (bucket !== "pending") return;
+
+    const socket = getSocket();
+    const handleNewComplaint = () => setRefreshKey((key) => key + 1);
+    socket.on("complaint:new", handleNewComplaint);
+    return () => {
+      socket.off("complaint:new", handleNewComplaint);
+    };
+  }, [bucket]);
+
   useEffect(() => {
     setIsLoading(true);
     getComplaints(page, {
@@ -82,7 +97,7 @@ export default function ComplaintListPage() {
       })
       .catch(() => toast.error("Failed to load complaints"))
       .finally(() => setIsLoading(false));
-  }, [page, search, bucket, riderFilter, dateFilter]);
+  }, [page, search, bucket, riderFilter, dateFilter, refreshKey]);
 
   const sortedComplaints = useMemo(() => {
     if (sortBy === "none") return complaints;

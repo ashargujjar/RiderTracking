@@ -78,8 +78,19 @@ export type RiderTrackingJob = {
 };
 
 export type RiderTracking = {
-  location: { latitude: number; longitude: number; updatedAt: string } | null;
+  location: { latitude: number; longitude: number; heading: number | null; updatedAt: string } | null;
   jobs: RiderTrackingJob[];
+};
+
+// Payload of the "rider:location" socket event emitted by
+// Rider.updateMyLocation (backend/model/rider.model.ts) to the
+// `location:<riderId>` room.
+export type RiderLocationEvent = {
+  riderId: string;
+  latitude: number;
+  longitude: number;
+  heading: number | null;
+  updatedAt: string;
 };
 
 type ApiRiderTrackingJob = Omit<RiderTrackingJob, "id"> & { id: number };

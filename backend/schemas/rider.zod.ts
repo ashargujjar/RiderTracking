@@ -22,6 +22,7 @@ export type RiderLoginInput = z.infer<typeof riderLoginSchema>;
 export const updateRiderLocationSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90),
   longitude: z.coerce.number().min(-180).max(180),
+  heading: z.coerce.number().min(0).max(360).optional(),
 });
 
 export type UpdateRiderLocationInput = z.infer<typeof updateRiderLocationSchema>;

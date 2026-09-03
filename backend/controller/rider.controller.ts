@@ -84,9 +84,9 @@ export async function getMyQueue(req: Request, res: Response) {
 
 export async function updateMyLocation(req: Request, res: Response) {
   try {
-    const { latitude, longitude } = updateRiderLocationSchema.parse(req.body);
+    const { latitude, longitude, heading } = updateRiderLocationSchema.parse(req.body);
     const riderId = res.locals.riderId as string;
-    await Rider.updateMyLocation(riderId, latitude, longitude);
+    await Rider.updateMyLocation(riderId, latitude, longitude, heading);
     res.status(200).json({ success: true });
   } catch (error) {
     if (error instanceof ZodError) {

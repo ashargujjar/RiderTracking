@@ -11,6 +11,10 @@ const riderLocationSchema = new Schema(
     riderId: { type: Schema.Types.ObjectId, ref: "Rider", required: true, unique: true },
     latitude: { type: Number, required: true, min: -90, max: 90 },
     longitude: { type: Number, required: true, min: -180, max: 180 },
+    // Compass direction of travel in degrees clockwise from true north.
+    // Optional — omitted (not stored as null) whenever the device's GPS fix
+    // didn't include a usable course, e.g. while the rider is stationary.
+    heading: { type: Number, min: 0, max: 360 },
   },
   { timestamps: true },
 );

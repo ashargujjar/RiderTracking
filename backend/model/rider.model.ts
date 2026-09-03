@@ -7,6 +7,7 @@ import { Rider as RiderSchema, type RiderDocument } from "../schemas/rider.schem
 import { RiderAssignment } from "../schemas/riderAssignment.schema";
 import { RiderLocation } from "../schemas/riderLocation.schema";
 import type { CreateRiderInput } from "../schemas/rider.zod";
+import { getIO } from "../utils/socket";
 
 // Matches PAGE_SIZE_TABLE in webFrontend/src/data/constants.ts
 const RIDERS_PAGE_SIZE = 8;
@@ -101,12 +102,26 @@ export class Rider {
   // Upserts this rider's live GPS fix — called repeatedly by the mobile app's
   // background location task while a job is On The Way/Arrived. Same
   // RiderLocation doc the admin's tracking page and client tracking read from.
-  static async updateMyLocation(riderId: string, latitude: number, longitude: number) {
-    await RiderLocation.findOneAndUpdate(
+  // Broadcasts the fresh fix to anyone watching this rider (admin dashboard,
+  // or the client whose complaint they're assigned to) via the
+  // location:<riderId> room — kept separate from the rider's own id-room
+  // (used for complaint:assigned) so a rider never receives its own fix back.
+  static async updateMyLocation(riderId: string, latitude: number, longitude: number, heading?: number) {
+    // Only merge heading in when this fix actually has one — an update with
+    // no course data must not overwrite a previously stored valid heading.
+    const updated = await RiderLocation.findOneAndUpdate(
       { riderId },
-      { latitude, longitude },
-      { upsert: true },
+      { latitude, longitude, ...(heading !== undefined ? { heading } : {}) },
+      { upsert: true, new: true },
     );
+
+    getIO().to(`location:${riderId}`).emit("rider:location", {
+      riderId,
+      latitude,
+      longitude,
+      heading: updated.heading ?? null,
+      updatedAt: updated.updatedAt,
+    });
   }
 
   static async getAllRiders(page: number, search?: string) {
@@ -184,7 +199,12 @@ export class Rider {
 
     return {
       location: location
-        ? { latitude: location.latitude, longitude: location.longitude, updatedAt: location.updatedAt }
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            heading: location.heading ?? null,
+            updatedAt: location.updatedAt,
+          }
         : null,
       jobs,
     };

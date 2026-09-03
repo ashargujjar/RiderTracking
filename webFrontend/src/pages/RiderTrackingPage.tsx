@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -11,10 +11,33 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { StatusBadge } from "../components/StatusBadge";
-import { getRiderById, getRiderTracking, type RiderTracking } from "../api/ridersApi";
+import { getRiderById, getRiderTracking, type RiderLocationEvent, type RiderTracking } from "../api/ridersApi";
 import type { RiderRecord } from "../data/mockRiders";
 import { complaintStatusTone } from "../data/statusStyles";
 import { estimateEtaMinutes, haversineKm } from "../utils/geo";
+import { getSocket } from "../lib/socket";
+
+// How long the marker takes to glide from its previous fix to a new one.
+const POSITION_TWEEN_MS = 1000;
+
+function tweenPosition(
+  from: LatLng,
+  to: LatLng,
+  onFrame: (position: LatLng) => void,
+  animationFrameRef: { current: number | null },
+) {
+  const start = performance.now();
+
+  const step = (now: number) => {
+    const t = Math.min((now - start) / POSITION_TWEEN_MS, 1);
+    onFrame([from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t]);
+    if (t < 1) {
+      animationFrameRef.current = requestAnimationFrame(step);
+    }
+  };
+
+  animationFrameRef.current = requestAnimationFrame(step);
+}
 
 type LatLng = [number, number];
 
@@ -22,12 +45,20 @@ type LatLng = [number, number];
 // a pinned client location) so the map still has somewhere to open.
 const FALLBACK_POSITION: LatLng = [31.5497, 74.3436];
 
-function riderIcon() {
+function riderIcon(heading: number | null) {
+  // A plain dot doesn't visibly read as "facing a direction" when rotated —
+  // only draw the arrow once we actually have a heading to point it at.
+  const arrow =
+    heading !== null
+      ? `<div class="absolute inset-0 flex items-center justify-center" style="transform: rotate(${heading}deg)">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2L4 20l8-5 8 5z"/></svg>
+         </div>`
+      : "";
   return L.divIcon({
     className: "",
     html: `<div class="relative flex h-9 w-9 items-center justify-center">
       <span class="absolute inline-flex h-8 w-8 animate-ping rounded-full bg-primary/40"></span>
-      <span class="relative flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-primary shadow-md"></span>
+      <span class="relative flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-primary shadow-md">${arrow}</span>
     </div>`,
     iconSize: [36, 36],
     iconAnchor: [18, 18],
@@ -69,6 +100,18 @@ export default function RiderTrackingPage() {
   const [tracking, setTracking] = useState<RiderTracking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // The Marker's `position` prop is frozen to the first fix (see the effect
+  // below) — react-leaflet re-snaps via setLatLng() whenever that prop's
+  // reference changes, which would fight the imperative rAF tween. All
+  // position updates after mount flow through markerRef instead.
+  const markerRef = useRef<L.Marker>(null);
+  const initialPositionRef = useRef<LatLng | null>(null);
+  // The marker's true current on-screen position, updated every animation
+  // frame — NOT the last tween's target, so an interrupted tween (a new fix
+  // arriving mid-glide) resumes from where it visually is, not a stale point.
+  const currentPositionRef = useRef<LatLng | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!id) return;
     Promise.all([getRiderById(id), getRiderTracking(id)])
@@ -82,6 +125,72 @@ export default function RiderTrackingPage() {
       })
       .finally(() => setIsLoading(false));
   }, [id]);
+
+  // Live position/heading push — replaces re-fetching on a timer. Mirrors
+  // the getSocket()/.on/.off convention from ComplaintListPage.tsx; the
+  // socket's connect/disconnect lifecycle itself is owned by AppLayout.tsx.
+  useEffect(() => {
+    if (!id) return;
+    const socket = getSocket();
+
+    const handleLocation = (event: RiderLocationEvent) => {
+      if (event.riderId !== id) return;
+      setTracking((prev) =>
+        prev
+          ? {
+              ...prev,
+              location: {
+                latitude: event.latitude,
+                longitude: event.longitude,
+                heading: event.heading,
+                updatedAt: event.updatedAt,
+              },
+            }
+          : prev,
+      );
+    };
+
+    socket.emit("location:subscribe", { riderId: id });
+    socket.on("rider:location", handleLocation);
+
+    return () => {
+      // Not optional cleanliness: the socket is kept alive for the whole
+      // dashboard session by AppLayout, so skipping this would leave the
+      // admin permanently subscribed to a stale rider after navigating away.
+      socket.emit("location:unsubscribe");
+      socket.off("rider:location", handleLocation);
+    };
+  }, [id]);
+
+  // Glides the marker from its previous fix to each new one instead of
+  // snapping. The very first fix just seeds the refs (the Marker already
+  // mounts at the right spot via its frozen `position` prop) — only fixes
+  // after that are animated.
+  useEffect(() => {
+    if (!tracking?.location) return;
+    const nextPosition: LatLng = [tracking.location.latitude, tracking.location.longitude];
+
+    if (!initialPositionRef.current) {
+      initialPositionRef.current = nextPosition;
+      currentPositionRef.current = nextPosition;
+      return;
+    }
+
+    tweenPosition(
+      currentPositionRef.current ?? nextPosition,
+      nextPosition,
+      (position) => {
+        currentPositionRef.current = position;
+        markerRef.current?.setLatLng(position);
+      },
+      animationFrameRef,
+    );
+
+    return () => {
+      if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracking?.location?.latitude, tracking?.location?.longitude]);
 
   if (isLoading) {
     return (
@@ -185,7 +294,13 @@ export default function RiderTrackingPage() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <FitBounds points={allPoints} />
-              {riderPosition && <Marker position={riderPosition} icon={riderIcon()} />}
+              {riderPosition && (
+                <Marker
+                  ref={markerRef}
+                  position={initialPositionRef.current ?? riderPosition}
+                  icon={riderIcon(tracking.location?.heading ?? null)}
+                />
+              )}
               {stops.map((stop, index) => (
                 <Marker key={stop.job.id} position={stop.location} icon={stopIcon(index + 1, index === 0)} />
               ))}
