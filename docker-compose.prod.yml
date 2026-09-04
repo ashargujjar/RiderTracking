@@ -2,7 +2,6 @@ services:
   mongo:
     image: mongo:7
     # Mongo's default cache sizing targets 50% of (host RAM - 1GB), which
-    # breaks down on a 1GB free-tier box — pin it low explicitly instead.
     command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     volumes:
       - mongo_data:/data/db
@@ -21,6 +20,12 @@ services:
     depends_on:
       - mongo
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.catkin-api.rule=Host(`api.catkinpk.online`)"
+      - "traefik.http.routers.catkin-api.entrypoints=websecure"
+      - "traefik.http.routers.catkin-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.catkin-api.loadbalancer.server.port=5000"
 
   frontend:
     build:
@@ -29,22 +34,12 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL}
     restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
-      - frontend
-    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.catkin-app.rule=Host(`catkinpk.online`)"
+      - "traefik.http.routers.catkin-app.entrypoints=websecure"
+      - "traefik.http.routers.catkin-app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.catkin-app.loadbalancer.server.port=80"
 
 volumes:
   mongo_data:
-  caddy_data:
-  caddy_config:
