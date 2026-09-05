@@ -117,6 +117,23 @@ export class Complaint {
     return result[0]?.total ?? 0;
   }
 
+  // Every one of this client's complaints that's currently unpaid, live —
+  // the actual set a combined Safepay checkout must charge for and settle.
+  // Unlike a single complaint's totalAmount/carriedOverComplaintIds (frozen
+  // at whatever moment IT was priced), this is never stale: it reflects
+  // exactly what's owed right now, regardless of pricing order.
+  static async getUnpaidComplaintsForClient(clientId: string): Promise<{ id: number; amountDue: number }[]> {
+    const complaints = await ComplaintSchema.find({
+      clientId: new Types.ObjectId(clientId),
+      amountDue: { $gt: 0 },
+      paymentStatus: "Unpaid",
+    })
+      .select("_id amountDue")
+      .lean();
+
+    return complaints.map((c) => ({ id: c._id as number, amountDue: c.amountDue }));
+  }
+
   static async createComplaint(clientId: string, input: CreateComplaintInput, photos: string[]) {
     const clientExists = await Client.exists({ _id: clientId });
     if (!clientExists) return null;

@@ -35,26 +35,33 @@ export class Payment {
       clientId,
     );
     if (!complaint) return { outcome: "not-found" };
-    if (
-      !complaint.isPriced ||
-      complaint.totalAmount <= 0 ||
-      complaint.paymentStatus === "Paid"
-    ) {
+    if (!complaint.isPriced || complaint.paymentStatus === "Paid") {
       return { outcome: "nothing-due" };
     }
 
-    // Refuse a second checkout while one is already awaiting webhook
-    // confirmation — each tap otherwise created a brand-new Safepay order,
-    // meaning a real risk of being charged more than once for the same bill.
+    // Charge and settle whatever's ACTUALLY unpaid for this client right
+    // now, computed live — not complaint.totalAmount, which is frozen at
+    // whatever moment this one complaint was priced and goes stale the
+    // instant pricing happens out of order relative to which complaint the
+    // client taps "Pay" from. See getUnpaidComplaintsForClient.
+    const unpaid = await Complaint.getUnpaidComplaintsForClient(clientId);
+    const totalDue = unpaid.reduce((sum, c) => sum + c.amountDue, 0);
+    if (totalDue <= 0) return { outcome: "nothing-due" };
+
+    const settledComplaintIds = unpaid.map((c) => c.id).filter((id) => id !== complaintId);
+
+    // Refuse a second checkout while one covering any of these complaints is
+    // already awaiting webhook confirmation — otherwise each tap risks a
+    // brand-new Safepay order and being charged more than once for the same bill.
     const pending = await PaymentSchema.exists({
-      complaintId,
+      complaintId: { $in: [complaintId, ...settledComplaintIds] },
       status: "initiated",
     });
     if (pending) return { outcome: "already-pending" };
 
     const orderId = `catkin-${complaintId}-${Date.now()}`;
     const { token } = await createSafepayOrder({
-      amountInRupees: complaint.totalAmount,
+      amountInRupees: totalDue,
       currency: "PKR",
       orderId,
     });
@@ -68,9 +75,9 @@ export class Payment {
 
     await PaymentSchema.create({
       complaintId,
-      settledComplaintIds: complaint.carriedOverComplaintIds ?? [],
+      settledComplaintIds,
       gateway: "safepay",
-      amount: complaint.totalAmount,
+      amount: totalDue,
       status: "initiated",
       gatewayOrderId: token,
     });
