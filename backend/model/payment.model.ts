@@ -68,6 +68,7 @@ export class Payment {
 
     await PaymentSchema.create({
       complaintId,
+      settledComplaintIds: complaint.carriedOverComplaintIds ?? [],
       gateway: "safepay",
       amount: complaint.totalAmount,
       status: "initiated",
@@ -147,8 +148,15 @@ export class Payment {
     await payment.save();
 
     if (isPaid) {
-      await ComplaintSchema.updateOne(
-        { _id: payment.complaintId },
+      // Settle this complaint AND every other one whose carried-over debt
+      // was folded into the amount actually charged — otherwise only the
+      // complaint the client tapped "Pay" from gets marked Paid, even though
+      // the full combined balance was collected. The paymentStatus:"Unpaid"
+      // guard keeps this idempotent/safe if one was already settled another
+      // way (e.g. an admin recording it as cash) in the meantime.
+      const settledIds = [payment.complaintId, ...(payment.settledComplaintIds ?? [])];
+      await ComplaintSchema.updateMany(
+        { _id: { $in: settledIds }, paymentStatus: "Unpaid" },
         { $set: { paymentStatus: "Paid" } },
       );
     }

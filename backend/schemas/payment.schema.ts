@@ -14,6 +14,11 @@ export type PaymentTransactionStatus = (typeof PAYMENT_TRANSACTION_STATUSES)[num
 const paymentSchema = new Schema(
   {
     complaintId: { type: Number, ref: "Complaint", required: true, index: true },
+    // Other complaint ids this payment's amount also settles — carried-over
+    // debt folded into the charge, copied from the complaint's
+    // carriedOverComplaintIds at checkout time. See complaint.model.ts's
+    // getCarriedOverComplaints.
+    settledComplaintIds: { type: [Number], default: [] },
     gateway: { type: String, enum: PAYMENT_GATEWAYS, required: true },
     amount: { type: Number, required: true, min: 0 },
     status: {

@@ -44,22 +44,27 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Sum of amountDue still owed on this client's OTHER unpaid complaints — carried
-// forward onto whichever complaint the admin is currently billing, so settling
-// "the total" clears the client's whole outstanding balance, not just one job.
-async function getCarriedOverDue(clientId: string, excludeComplaintId: number): Promise<number> {
-  const result = await ComplaintSchema.aggregate([
-    {
-      $match: {
-        clientId: new Types.ObjectId(clientId),
-        _id: { $ne: excludeComplaintId },
-        amountDue: { $gt: 0 },
-        paymentStatus: "Unpaid",
-      },
-    },
-    { $group: { _id: null, total: { $sum: "$amountDue" } } },
-  ]);
-  return result[0]?.total ?? 0;
+// This client's OTHER unpaid complaints — carried forward onto whichever
+// complaint the admin is currently billing (both the sum AND which complaints
+// it came from), so settling "the total" clears the client's whole
+// outstanding balance instead of just one job.
+async function getCarriedOverComplaints(
+  clientId: string,
+  excludeComplaintId: number,
+): Promise<{ ids: number[]; total: number }> {
+  const complaints = await ComplaintSchema.find({
+    clientId: new Types.ObjectId(clientId),
+    _id: { $ne: excludeComplaintId },
+    amountDue: { $gt: 0 },
+    paymentStatus: "Unpaid",
+  })
+    .select("_id amountDue")
+    .lean();
+
+  return {
+    ids: complaints.map((c) => c._id as number),
+    total: complaints.reduce((sum, c) => sum + c.amountDue, 0),
+  };
 }
 
 // Count of this client's OTHER complaints that currently represent unresolved
@@ -132,12 +137,12 @@ export class Complaint {
     const complaint = await ComplaintSchema.findById(id).lean();
     if (!complaint) return null;
 
-    const [client, rider, carriedOverDue] = await Promise.all([
+    const [client, rider, carriedOver] = await Promise.all([
       Client.findById(complaint.clientId)
         .select("client.site client.location client.contactNo wiring.status")
         .lean(),
       complaint.assignedTo ? Rider.findById(complaint.assignedTo).select("name").lean() : null,
-      getCarriedOverDue(complaint.clientId.toString(), complaint._id!),
+      getCarriedOverComplaints(complaint.clientId.toString(), complaint._id!),
     ]);
 
     return {
@@ -155,7 +160,7 @@ export class Complaint {
       assignedTo: complaint.assignedTo
         ? { _id: complaint.assignedTo.toString(), name: rider?.name ?? null }
         : null,
-      carriedOverDue,
+      carriedOverDue: carriedOver.total,
     };
   }
 
@@ -404,11 +409,12 @@ export class Complaint {
       // from a complaint that's simply never been touched by an admin yet).
       complaint.isPriced = true;
 
-      // Total payable folds in any other unpaid balance this client still owes,
-      // so settling "the total" clears their whole outstanding balance, not
-      // just this one complaint's charge.
-      const carriedOverDue = await getCarriedOverDue(complaint.clientId.toString(), complaint._id!);
-      complaint.totalAmount = carriedOverDue + input.amountDue;
+      // Total payable folds in any other unpaid balance this client still owes —
+      // snapshot both the sum AND which complaints it came from, so a payment
+      // that settles this complaint can also settle those, not just this one.
+      const carriedOver = await getCarriedOverComplaints(complaint.clientId.toString(), complaint._id!);
+      complaint.totalAmount = carriedOver.total + input.amountDue;
+      complaint.carriedOverComplaintIds = carriedOver.ids;
     }
 
     if (input.paymentStatus !== undefined) {

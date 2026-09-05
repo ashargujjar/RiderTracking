@@ -62,6 +62,10 @@ const complaintSchema = new Schema(
     totalAmount: { type: Number, required: true, default: 0, min: 0 },
     // Remaining balance still owed — equals totalAmount until a partial payment is recorded.
     amountDue: { type: Number, required: true, default: 0, min: 0 },
+    // Snapshot of which OTHER complaints' unpaid balance was folded into
+    // totalAmount above, taken at the same moment — lets a payment that
+    // settles this complaint also settle those, instead of only this one.
+    carriedOverComplaintIds: { type: [Number], default: [] },
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, required: true, default: "Unpaid" },
     // Flips true the first time an admin ever sets amountDue via updateComplaint
     // (even to 0) — distinguishes "priced at zero" (deliberately free) from
